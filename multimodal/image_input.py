@@ -13,7 +13,7 @@ if __name__ == "__main__":
         api_key=os.environ["OPENAI_API_KEY"],
     )
 
-    IMAGE_INPUT_PATH: Path = Path("./example_image.png")
+    IMAGE_INPUT_PATH: Path = Path("./static/example_image.png")
     with open(IMAGE_INPUT_PATH, "rb") as file:
         image_contents: bytes = file.read()
 
