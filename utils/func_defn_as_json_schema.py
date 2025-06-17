@@ -80,12 +80,16 @@ def func_defn_as_json_schema(func: Callable) -> dict:
 
     json_schema: dict = {
         "type": "function",
-        "name": func.__name__,
-        "description": func_desc or func.__doc__,
-        "parameters": pydantic.TypeAdapter(func).json_schema(),
+        "function": {
+            "name": func.__name__,
+            "description": func_desc or func.__doc__,
+            "parameters": pydantic.TypeAdapter(func).json_schema(),
+        },
     }
 
-    for param_name, param in json_schema["parameters"]["properties"].items():
+    for param_name, param in json_schema["function"]["parameters"][
+        "properties"
+    ].items():
         if param_name in docstring_arg_descriptions:
             param["description"] = docstring_arg_descriptions[param_name]
 

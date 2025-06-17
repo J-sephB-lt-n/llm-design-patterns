@@ -58,7 +58,7 @@ Please review the following python script in terms of the core tenets:
 ```python
 {code_contents}
 ```
-            """.strip()
+            """.strip(),
         }
     )
 

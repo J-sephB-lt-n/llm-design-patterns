@@ -20,4 +20,4 @@ dev = [
 ]
 
 [tool.uv.workspace]
-members = ["structured_output"]
+members = ["structured_output", "tools", "rag", "pdf_to_text"]

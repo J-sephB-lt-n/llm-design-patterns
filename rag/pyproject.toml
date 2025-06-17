@@ -1,7 +1,11 @@
 [project]
-name = "structured-output"
+name = "rag"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "chonkie>=1.0.10",
+    "model2vec>=0.6.0",
+    "streamlit>=1.45.1",
+]
