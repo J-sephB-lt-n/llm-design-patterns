@@ -15,6 +15,7 @@ from docling.datamodel.pipeline_options import (
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.utils.model_downloader import download_models
 
+
 def doc_to_text(
     doc_file_extension: Literal[".docx", ".pdf"],
     doc_file_content: bytes,
@@ -26,8 +27,10 @@ def doc_to_text(
     Note:
         - Can also export to JSON, HTML and others (read the docling docs)
     """
-    DOCLING_MODELS_PATH: Final[Path] = Path.home() / ".cache/docling/models" # the package default
-    if not DOCLING_MODELS_PATH.exists(): 
+    DOCLING_MODELS_PATH: Final[Path] = (
+        Path.home() / ".cache/docling/models"
+    )  # the package default
+    if not DOCLING_MODELS_PATH.exists():
         if verbose:
             print(f"Downloading docling models to {DOCLING_MODELS_PATH}")
         download_models()
@@ -42,7 +45,9 @@ def doc_to_text(
             InputFormat.PDF: PdfFormatOption(
                 pipeline_options=PdfPipelineOptions(
                     artifacts_path=DOCLING_MODELS_PATH,
-                    accelerator_options=AcceleratorOptions(num_threads=4, device="auto"),
+                    accelerator_options=AcceleratorOptions(
+                        num_threads=4, device="auto"
+                    ),
                     do_table_structure=True,
                     do_ocr=True,
                     generate_picture_images=False,
