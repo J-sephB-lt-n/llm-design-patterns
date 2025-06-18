@@ -32,7 +32,7 @@ class ChunkerDef(BaseModel):
     hardcoded_chunker_kwargs: dict[str, Any]
 
 
-CHUNKERS: Final[dict[str, Optional[Callable]]] = {
+CHUNKERS: Final[dict[str, Optional[ChunkerDef]]] = {
     "Token Chunker": ChunkerDef(
         chunker=chonkie.TokenChunker,
         explanation="""
@@ -129,12 +129,47 @@ It works sequentially through a fixed list of delimiters, which by default is:
             "lang": "en",
         },
     ),
-    # "Code Chunker": None,
-    # "Semantic Chunker": None,
-    # "SDPM Chunker": None,
-    # "Late Chunker": None,
-    # "Neural Chunker": None,
-    # "Slumber Chunker": None,
+    "Code Chunker": None,
+    "Semantic Chunker": ChunkerDef(
+        chunker=chonkie.SemanticChunker,
+        explanation="""
+Splits text into chunks based on semantic similarity (using dense vectors).
+(i.e. semantically similar text will go into the same chunk)
+
+| Arg                         | Description
+|-----------------------------|------------
+| mode                        | Method of grouping sentences. One of ["cumulative", "window"]
+| threshold                   | Similarity threshold used to decide whether sentences are "similar"
+| chunk_size                  | Maximum number of tokens in a chunk
+| similarity_window           | Number of sentences to consider for similarity threshold calculation
+| min_sentences               | Minimum number of sentences in a chunk
+| min_chunk_size              | Minimum number of tokens in a chunk
+| min_characters_per_sentence | Minimum number of characters in a sentence
+| threshold_step              | Step size for similarity threshold calculation
+""".strip(),
+        streamlit_input_controls={
+            "mode": partial(
+                st.selectbox,
+                label="Mode (method of grouping sentences)",
+                options=["cumulative", "window"],
+            ),
+            "threshold": partial(
+                st.number_input,
+                label="Threshold (sentence similarity threshold)",
+                min_value=0,
+                max_value=1,
+                value=0.5,
+            ),
+            # ...
+        },
+        hardcoded_chunker_kwargs={
+            "embedding_model": "minishlab/potion-base-8M",
+        },
+    ),
+    "SDPM Chunker": None,
+    "Late Chunker": None,
+    "Neural Chunker": None,
+    "Slumber Chunker": None,
 }
 
 
@@ -182,29 +217,33 @@ def chunk_doc_page():
         label="Select a Chonkie text chunker",
         options=CHUNKERS.keys(),
     )
-    # if selected_chunker_name:
-    chunker_def: ChunkerDef = CHUNKERS[selected_chunker_name]
-    st.markdown(chunker_def.explanation)
-    user_chunker_kwargs: dict = {}
-    for argname, streamlit_control in chunker_def.streamlit_input_controls.items():
-        user_chunker_kwargs[argname] = streamlit_control()
-
-    submit_button = st.button(label="Chunk Document with Selected Chunker")
-
-    if submit_button:
-        all_chunker_kwargs: dict = (
-            user_chunker_kwargs | chunker_def.hardcoded_chunker_kwargs
+    chunker_def: Optional[ChunkerDef] = CHUNKERS[selected_chunker_name]
+    if chunker_def is None:
+        st.write(
+            f"I have not implemented the '{selected_chunker_name}' chunker in this app yet"
         )
-        st.write("Final chunker params:")
-        st.json(all_chunker_kwargs)
-        chunker: chonkie.BaseChunker = chunker_def.chunker(**all_chunker_kwargs)
-        chunks = chunker.chunk(st.session_state["doc_text_content"])
-        for chunk_num, chunk in enumerate(chunks, start=1):
-            st.text_area(
-                label=f"Chunk {chunk_num:,}",
-                value=chunk.text,
-                height=max(68, 30 * (chunk.text.count("\n") + 1)),
+    else:
+        st.markdown(chunker_def.explanation)
+        user_chunker_kwargs: dict = {}
+        for argname, streamlit_control in chunker_def.streamlit_input_controls.items():
+            user_chunker_kwargs[argname] = streamlit_control()
+
+        submit_button = st.button(label="Chunk Document with Selected Chunker")
+
+        if submit_button:
+            all_chunker_kwargs: dict = (
+                user_chunker_kwargs | chunker_def.hardcoded_chunker_kwargs
             )
+            st.write("Final chunker params:")
+            st.json(all_chunker_kwargs)
+            chunker: chonkie.BaseChunker = chunker_def.chunker(**all_chunker_kwargs)
+            chunks = chunker.chunk(st.session_state["doc_text_content"])
+            for chunk_num, chunk in enumerate(chunks, start=1):
+                st.text_area(
+                    label=f"Chunk {chunk_num:,}",
+                    value=chunk.text,
+                    height=max(68, 35 * (chunk.text.count("\n") + 1)),
+                )
 
 
 PAGES: Final[dict[str, Callable]] = {
