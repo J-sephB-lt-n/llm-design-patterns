@@ -91,9 +91,20 @@ def chunk_doc_page():
         label="Select a Chonkie text chunker",
         options=CHUNKERS.keys(),
     )
-    if selected_chunker_name:
-        chunker: ChunkerDef = CHUNKERS[selected_chunker_name]  
-        st.text(chunker.explanation)
+    # if selected_chunker_name:
+    chunker_def: ChunkerDef = CHUNKERS[selected_chunker_name]  
+    st.text(chunker_def.explanation)
+    user_chunker_kwargs: dict = {}
+    for argname, streamlit_control in chunker_def.streamlit_input_controls.items():
+        user_chunker_kwargs[argname] = streamlit_control()
+
+    submit_button = st.button(label="Chunk Document with Selected Chunker")
+
+    if submit_button:
+        all_chunker_kwargs: dict = user_chunker_kwargs | chunker_def.hardcoded_chunker_kwargs
+        st.write("Final chunker params:")
+        st.json(all_chunker_kwargs)
+        chunker: chonkie.BaseChunker = chunker_def.chunker(**all_chunker_kwargs)
 
 PAGES: Final[dict[str, Callable]] = {
     "Upload Doc": upload_doc_page,
