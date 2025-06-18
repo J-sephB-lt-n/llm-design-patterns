@@ -3,11 +3,13 @@ TODO: module docstring
 """
 
 import sys
+from functools import partial
 from pathlib import Path
-from typing import Callable, Final, Optional
+from typing import Any, Callable, Final, Optional
 
+import chonkie
 import streamlit as st
-from chonkie import TokenChunker, SentenceChunker # and more
+from pydantic import BaseModel, ConfigDict 
 
 # I absolutely hate this hack, but I want streamlit to run
 #   from the project root folder and I can't find the equivalent of 
@@ -19,16 +21,32 @@ sys.path.insert(
 
 from pdf_to_text.docling_pdf_to_text import doc_to_text
 
+class ChunkerDef(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    chunker: type[chonkie.BaseChunker]
+    explanation: str
+    streamlit_input_controls: dict[str, Callable]
+    hardcoded_chunker_kwargs: dict[str, Any]
+
 CHUNKERS: Final[dict[str, Optional[Callable]]] = {
-    "Token Chunker": TokenChunker,
-    "Sentence Chunker": SentenceChunker,
-    "Recursive Chunker": None,
-    "Code Chunker": None,
-    "Semantic Chunker": None,
-    "SDPM Chunker": None,
-    "Late Chunker": None,
-    "Neural Chunker": None,
-    "Slumber Chunker": None,
+    "Token Chunker": ChunkerDef(
+        chunker=chonkie.TokenChunker,
+        explanation="Puts a fixed number of tokens in each chunk.",
+        streamlit_input_controls={
+            "chunk_size": partial(st.number_input, label="Chunk Size (n tokens)", min_value=1, value=512),
+            "chunk_overlap": partial(st.number_input, label="Chunk Overlap (n tokens)", min_value=0, value=0)
+        },
+        hardcoded_chunker_kwargs={"tokenizer": "gpt2"}
+    ),
+    # "Sentence Chunker": None,
+    # "Recursive Chunker": None,
+    # "Code Chunker": None,
+    # "Semantic Chunker": None,
+    # "SDPM Chunker": None,
+    # "Late Chunker": None,
+    # "Neural Chunker": None,
+    # "Slumber Chunker": None,
 }
 
 def upload_doc_page():
@@ -74,7 +92,8 @@ def chunk_doc_page():
         options=CHUNKERS.keys(),
     )
     if selected_chunker_name:
-        st.text(f"Selected chunker is {selected_chunker_name}")
+        chunker: ChunkerDef = CHUNKERS[selected_chunker_name]  
+        st.text(chunker.explanation)
 
 PAGES: Final[dict[str, Callable]] = {
     "Upload Doc": upload_doc_page,
