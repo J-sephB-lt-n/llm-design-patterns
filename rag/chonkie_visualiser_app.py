@@ -26,7 +26,7 @@ from pdf_to_text.docling_pdf_to_text import doc_to_text
 class ChunkerDef(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    chunker: type[chonkie.BaseChunker]
+    chunker: type[chonkie.BaseChunker] | Callable
     explanation: str
     streamlit_input_controls: dict[str, Callable]
     hardcoded_chunker_kwargs: dict[str, Any]
@@ -35,7 +35,14 @@ class ChunkerDef(BaseModel):
 CHUNKERS: Final[dict[str, Optional[Callable]]] = {
     "Token Chunker": ChunkerDef(
         chunker=chonkie.TokenChunker,
-        explanation="Puts a fixed number of tokens in each chunk.",
+        explanation="""
+Puts a fixed number of tokens in each chunk.
+
+| Arg           | Description
+|---------------|------------
+| chunk_size    | Maximum number of tokens per chunk
+| chunk_overlap | Number of tokens shared by consecutive chunks
+""".strip(),
         streamlit_input_controls={
             "chunk_size": partial(
                 st.number_input, label="Chunk Size (n tokens)", min_value=1, value=512
@@ -46,8 +53,82 @@ CHUNKERS: Final[dict[str, Optional[Callable]]] = {
         },
         hardcoded_chunker_kwargs={"tokenizer": tiktoken.get_encoding("gpt2")},
     ),
-    # "Sentence Chunker": None,
-    # "Recursive Chunker": None,
+    "Sentence Chunker": ChunkerDef(
+        chunker=chonkie.SentenceChunker,
+        explanation="""
+Puts a fixed number of tokens in each chunk, ensuring complete sentences (won't split in the middle of a sentence)
+
+| Arg                     | Description
+|-------------------------|------------
+| chunk_size              | Maximum number of tokens per chunk
+| chunk_overlap           | Number of tokens shared by consecutive chunks
+| min_sentences_per_chunk | Minimum number of sentences allowed per chunk
+""".strip(),
+        streamlit_input_controls={
+            "chunk_size": partial(
+                st.number_input, label="Chunk Size (n tokens)", min_value=1, value=512
+            ),
+            "chunk_overlap": partial(
+                st.number_input, label="Chunk Overlap (n tokens)", min_value=0, value=0
+            ),
+            "min_sentences_per_chunk": partial(
+                st.number_input,
+                label="Minimum n Sentences in Chunk",
+                min_value=1,
+                value=1,
+            ),
+        },
+        hardcoded_chunker_kwargs={
+            "tokenizer_or_token_counter": tiktoken.get_encoding("gpt2")
+        },
+    ),
+    "Recursive Chunker": ChunkerDef(
+        chunker=chonkie.RecursiveChunker.from_recipe,
+        explanation="""
+Continues to split chunks until they contain less than `chunk_size` tokens.
+
+It works sequentially through a fixed list of delimiters, which by default is:
+
+1. Chunk by paragraph ('\\n\\n')
+
+2. Chunk by newline ('\\n')
+
+3. Chunk by sentence ('. ', '! ', '? ')
+
+4. Chunk by whitespace (' ')
+
+5. Chunk by characters
+
+| Arg                         | Description
+|-----------------------------|------------------------
+| chunk_size                  | Minimum number of tokens in a chunk
+| min_characters_per_chunk    | Minimum number of characters in a chunk
+| recipe                      | A predefined set of rules (see https://huggingface.co/datasets/chonkie-ai/recipes)
+""".strip(),
+        streamlit_input_controls={
+            "chunk_size": partial(
+                st.number_input,
+                label="Maximum number of tokens in a chunk",
+                min_value=1,
+                value=512,
+            ),
+            "min_characters_per_chunk": partial(
+                st.number_input,
+                label="Minimum number of characters in a chunk",
+                min_value=1,
+                value=1,
+            ),
+            "name": partial(
+                st.selectbox,
+                label="Chosen recipe (rule set)",
+                options=["default", "markdown"],
+            ),
+        },
+        hardcoded_chunker_kwargs={
+            "tokenizer_or_token_counter": tiktoken.get_encoding("gpt2"),
+            "lang": "en",
+        },
+    ),
     # "Code Chunker": None,
     # "Semantic Chunker": None,
     # "SDPM Chunker": None,
@@ -103,7 +184,7 @@ def chunk_doc_page():
     )
     # if selected_chunker_name:
     chunker_def: ChunkerDef = CHUNKERS[selected_chunker_name]
-    st.text(chunker_def.explanation)
+    st.markdown(chunker_def.explanation)
     user_chunker_kwargs: dict = {}
     for argname, streamlit_control in chunker_def.streamlit_input_controls.items():
         user_chunker_kwargs[argname] = streamlit_control()
@@ -118,8 +199,12 @@ def chunk_doc_page():
         st.json(all_chunker_kwargs)
         chunker: chonkie.BaseChunker = chunker_def.chunker(**all_chunker_kwargs)
         chunks = chunker.chunk(st.session_state["doc_text_content"])
-        for chunk in chunks:
-            st.code(chunk.text, language=None)
+        for chunk_num, chunk in enumerate(chunks, start=1):
+            st.text_area(
+                label=f"Chunk {chunk_num:,}",
+                value=chunk.text,
+                height=max(68, 30 * (chunk.text.count("\n") + 1)),
+            )
 
 
 PAGES: Final[dict[str, Callable]] = {
@@ -130,7 +215,9 @@ PAGES: Final[dict[str, Callable]] = {
 
 if __name__ == "__main__":
     st.set_page_config(
-        page_title="Chonkie Visualiser", layout="wide", initial_sidebar_state="expanded"
+        page_title="Chonkie Visualiser",
+        layout="wide",
+        initial_sidebar_state="expanded",
     )
 
     st.sidebar.title("Navigation")
