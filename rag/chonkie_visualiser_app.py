@@ -26,10 +26,10 @@ from pdf_to_text.docling_pdf_to_text import doc_to_text
 class ChunkerDef(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    chunker: type[chonkie.BaseChunker] | Callable
+    chunker: type[chonkie.BaseChunker] | Callable | None = None
     explanation: str
-    streamlit_input_controls: dict[str, Callable]
-    hardcoded_chunker_kwargs: dict[str, Any]
+    streamlit_input_controls: dict[str, Callable] | None = None
+    hardcoded_chunker_kwargs: dict[str, Any] | None = None
 
 
 CHUNKERS: Final[dict[str, Optional[ChunkerDef]]] = {
@@ -129,12 +129,32 @@ It works sequentially through a fixed list of delimiters, which by default is:
             "lang": "en",
         },
     ),
-    "Code Chunker": None,
+    "Code Chunker": ChunkerDef(
+        explanation=""",
+CodeChunker splits code using the structure (Abstract Syntax Tree) of the code.
+
+The AST is implemented using https://github.com/tree-sitter/tree-sitter. 
+
+This implementation supports any programming language in `tree-sitter-language-pack`
+        """.strip()
+    ),
     "Semantic Chunker": ChunkerDef(
         chunker=chonkie.SemanticChunker,
         explanation="""
 Splits text into chunks based on semantic similarity (using dense vectors).
 (i.e. semantically similar text will go into the same chunk)
+
+The algorithm is:
+
+1. Split the document into sentences (e.g. by splitting on ['. ', '? ', '! '])
+
+2. Group sequential sentences together (string concatenation of sentence text)
+
+3. Embed each sentence group into a semantic vector using a dense embedding model (e.g. model2vec)
+
+4. Calculate the vector distance between consecutive vectors (e.g. group 1 vs group 2, group 2 vs group 3, group 3 vs group 4...)
+
+5. Split into 2 chunks where the distance between 2 groups exceeds a chosen `threshold` value
 
 | Arg                         | Description
 |-----------------------------|------------
@@ -166,9 +186,40 @@ Splits text into chunks based on semantic similarity (using dense vectors).
             "embedding_model": "minishlab/potion-base-8M",
         },
     ),
-    "SDPM Chunker": None,
-    "Late Chunker": None,
-    "Neural Chunker": None,
+    "SDPM Chunker": ChunkerDef(
+        explanation="""
+The SDPMChunker extends SemanticChunker by using a double-pass merging approach. 
+
+It first groups content by semantic similarity, then merges similar groups within a skip window, allowing it to connect related content that \
+may not be consecutive in the text. 
+
+This technique is particularly useful for documents with recurring themes or concepts spread apart.
+        """.strip()
+    ),
+    "Late Chunker": ChunkerDef(
+        explanation="""
+The LateChunker implements the late chunking strategy described in the \
+[Late Chunking](https://arxiv.org/abs/2409.04701) paper.
+
+It builds on top of the RecursiveChunker and uses document-level embeddings to create more \
+semantically rich chunk representations.
+
+Instead of generating embeddings for each chunk independently, the LateChunker first encodes \
+the entire text into a single embedding. It then splits the text using recursive rules and \
+derives each chunk’s embedding by averaging relevant parts of the full document embedding. \
+This allows each chunk to carry broader contextual information, improving retrieval performance \
+in RAG systems.
+""".strip()
+    ),
+    "Neural Chunker": ChunkerDef(
+        explanation="""
+The NeuralChunker uses a fine-tuned BERT model specifically trained to identify semantic shifts \
+within text, allowing it to split documents at points where the topic or context changes \
+significantly. This provides highly coherent chunks ideal for RAG.
+
+The default model is "mirth/chonky_modernbert_base_1"
+""".strip()
+    ),
     "Slumber Chunker": None,
 }
 
@@ -218,10 +269,13 @@ def chunk_doc_page():
         options=CHUNKERS.keys(),
     )
     chunker_def: Optional[ChunkerDef] = CHUNKERS[selected_chunker_name]
-    if chunker_def is None:
-        st.write(
+    if chunker_def is None or chunker_def.chunker is None:
+        st.warning(
             f"I have not implemented the '{selected_chunker_name}' chunker in this app yet"
         )
+        if chunker_def.explanation is not None:
+            st.markdown(chunker_def.explanation)
+
     else:
         st.markdown(chunker_def.explanation)
         user_chunker_kwargs: dict = {}
