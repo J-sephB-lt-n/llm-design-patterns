@@ -139,7 +139,7 @@ uv run python -m prompt_chaining.step_back_prompting_example
 ## Retrieval-Augmented Generation (RAG)
 
 ```bash
-uv run --project rag streamlit run rag/chonkie_visualiser_app.py
+uv run streamlit run rag/chonkie_visualiser_app.py
 ```
 
 ## Routing
