@@ -23,208 +23,27 @@ sys.path.insert(
 from pdf_to_text.docling_pdf_to_text import doc_to_text
 
 
-class ChunkerDef(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+def landing_page(*args, **kwargs):
+    st.title("Text Chunk Algorithm Explorer")
+    st.markdown(
+        """
+I designed this simple app in order to compare different text chunking approaches.
 
-    chunker: type[chonkie.BaseChunker] | Callable | None = None
-    explanation: str
-    streamlit_input_controls: dict[str, Callable] | None = None
-    hardcoded_chunker_kwargs: dict[str, Any] | None = None
+I'm using the implementations in the [Chonkie](https://github.com/chonkie-inc/chonkie) python package.
 
+Use the app as follows:
 
-CHUNKERS: Final[dict[str, Optional[ChunkerDef]]] = {
-    "Token Chunker": ChunkerDef(
-        chunker=chonkie.TokenChunker,
-        explanation="""
-Puts a fixed number of tokens in each chunk.
+1. Use **Upload Doc** page to ingest a document (currently uses [docling](https://github.com/docling-project/docling) \
+for PDF to text)
 
-| Arg           | Description
-|---------------|------------
-| chunk_size    | Maximum number of tokens per chunk
-| chunk_overlap | Number of tokens shared by consecutive chunks
-""".strip(),
-        streamlit_input_controls={
-            "chunk_size": partial(
-                st.number_input, label="Chunk Size (n tokens)", min_value=1, value=512
-            ),
-            "chunk_overlap": partial(
-                st.number_input, label="Chunk Overlap (n tokens)", min_value=0, value=0
-            ),
-        },
-        hardcoded_chunker_kwargs={"tokenizer": tiktoken.get_encoding("gpt2")},
-    ),
-    "Sentence Chunker": ChunkerDef(
-        chunker=chonkie.SentenceChunker,
-        explanation="""
-Puts a fixed number of tokens in each chunk, ensuring complete sentences (won't split in the middle of a sentence)
+2. Use **View Uploaded Doc** page to see the text of your ingested document
 
-| Arg                     | Description
-|-------------------------|------------
-| chunk_size              | Maximum number of tokens per chunk
-| chunk_overlap           | Number of tokens shared by consecutive chunks
-| min_sentences_per_chunk | Minimum number of sentences allowed per chunk
-""".strip(),
-        streamlit_input_controls={
-            "chunk_size": partial(
-                st.number_input, label="Chunk Size (n tokens)", min_value=1, value=512
-            ),
-            "chunk_overlap": partial(
-                st.number_input, label="Chunk Overlap (n tokens)", min_value=0, value=0
-            ),
-            "min_sentences_per_chunk": partial(
-                st.number_input,
-                label="Minimum n Sentences in Chunk",
-                min_value=1,
-                value=1,
-            ),
-        },
-        hardcoded_chunker_kwargs={
-            "tokenizer_or_token_counter": tiktoken.get_encoding("gpt2")
-        },
-    ),
-    "Recursive Chunker": ChunkerDef(
-        chunker=chonkie.RecursiveChunker.from_recipe,
-        explanation="""
-Continues to split chunks until they contain less than `chunk_size` tokens.
-
-It works sequentially through a fixed list of delimiters, which by default is:
-
-1. Chunk by paragraph ('\\n\\n')
-
-2. Chunk by newline ('\\n')
-
-3. Chunk by sentence ('. ', '! ', '? ')
-
-4. Chunk by whitespace (' ')
-
-5. Chunk by characters
-
-| Arg                         | Description
-|-----------------------------|------------------------
-| chunk_size                  | Minimum number of tokens in a chunk
-| min_characters_per_chunk    | Minimum number of characters in a chunk
-| recipe                      | A predefined set of rules (see https://huggingface.co/datasets/chonkie-ai/recipes)
-""".strip(),
-        streamlit_input_controls={
-            "chunk_size": partial(
-                st.number_input,
-                label="Maximum number of tokens in a chunk",
-                min_value=1,
-                value=512,
-            ),
-            "min_characters_per_chunk": partial(
-                st.number_input,
-                label="Minimum number of characters in a chunk",
-                min_value=1,
-                value=1,
-            ),
-            "name": partial(
-                st.selectbox,
-                label="Chosen recipe (rule set)",
-                options=["default", "markdown"],
-            ),
-        },
-        hardcoded_chunker_kwargs={
-            "tokenizer_or_token_counter": tiktoken.get_encoding("gpt2"),
-            "lang": "en",
-        },
-    ),
-    "Code Chunker": ChunkerDef(
-        explanation=""",
-CodeChunker splits code using the structure (Abstract Syntax Tree) of the code.
-
-The AST is implemented using https://github.com/tree-sitter/tree-sitter. 
-
-This implementation supports any programming language in `tree-sitter-language-pack`
+3. Use **Chunk Doc** page to experiment with different chunking approaches
         """.strip()
-    ),
-    "Semantic Chunker": ChunkerDef(
-        chunker=chonkie.SemanticChunker,
-        explanation="""
-Splits text into chunks based on semantic similarity (using dense vectors).
-(i.e. semantically similar text will go into the same chunk)
-
-The algorithm is:
-
-1. Split the document into sentences (e.g. by splitting on ['. ', '? ', '! '])
-
-2. Group sequential sentences together (string concatenation of sentence text)
-
-3. Embed each sentence group into a semantic vector using a dense embedding model (e.g. model2vec)
-
-4. Calculate the vector distance between consecutive vectors (e.g. group 1 vs group 2, group 2 vs group 3, group 3 vs group 4...)
-
-5. Split into 2 chunks where the distance between 2 groups exceeds a chosen `threshold` value
-
-| Arg                         | Description
-|-----------------------------|------------
-| mode                        | Method of grouping sentences. One of ["cumulative", "window"]
-| threshold                   | Similarity threshold used to decide whether sentences are "similar"
-| chunk_size                  | Maximum number of tokens in a chunk
-| similarity_window           | Number of sentences to consider for similarity threshold calculation
-| min_sentences               | Minimum number of sentences in a chunk
-| min_chunk_size              | Minimum number of tokens in a chunk
-| min_characters_per_sentence | Minimum number of characters in a sentence
-| threshold_step              | Step size for similarity threshold calculation
-""".strip(),
-        streamlit_input_controls={
-            "mode": partial(
-                st.selectbox,
-                label="Mode (method of grouping sentences)",
-                options=["cumulative", "window"],
-            ),
-            "threshold": partial(
-                st.number_input,
-                label="Threshold (sentence similarity threshold)",
-                min_value=0,
-                max_value=1,
-                value=0.5,
-            ),
-            # ...
-        },
-        hardcoded_chunker_kwargs={
-            "embedding_model": "minishlab/potion-base-8M",
-        },
-    ),
-    "SDPM Chunker": ChunkerDef(
-        explanation="""
-The SDPMChunker extends SemanticChunker by using a double-pass merging approach. 
-
-It first groups content by semantic similarity, then merges similar groups within a skip window, allowing it to connect related content that \
-may not be consecutive in the text. 
-
-This technique is particularly useful for documents with recurring themes or concepts spread apart.
-        """.strip()
-    ),
-    "Late Chunker": ChunkerDef(
-        explanation="""
-The LateChunker implements the late chunking strategy described in the \
-[Late Chunking](https://arxiv.org/abs/2409.04701) paper.
-
-It builds on top of the RecursiveChunker and uses document-level embeddings to create more \
-semantically rich chunk representations.
-
-Instead of generating embeddings for each chunk independently, the LateChunker first encodes \
-the entire text into a single embedding. It then splits the text using recursive rules and \
-derives each chunk’s embedding by averaging relevant parts of the full document embedding. \
-This allows each chunk to carry broader contextual information, improving retrieval performance \
-in RAG systems.
-""".strip()
-    ),
-    "Neural Chunker": ChunkerDef(
-        explanation="""
-The NeuralChunker uses a fine-tuned BERT model specifically trained to identify semantic shifts \
-within text, allowing it to split documents at points where the topic or context changes \
-significantly. This provides highly coherent chunks ideal for RAG.
-
-The default model is "mirth/chonky_modernbert_base_1"
-""".strip()
-    ),
-    "Slumber Chunker": None,
-}
+    )
 
 
-def upload_doc_page():
+def upload_doc_page(*args, **kwargs):
     st.title("Upload Doc")
     uploaded_file = st.file_uploader(
         label="Upload a document (.pdf or .txt)", type=["pdf", "txt"]
@@ -247,14 +66,27 @@ def upload_doc_page():
         else:
             raise RuntimeError("Reached a path which should be unreachable")
 
+        st.session_state["doc_n_tokens"] = len(
+            st.session_state["tokeniser"].encode(st.session_state["doc_text_content"])
+        )
+
         st.success(f"Successfully ingested document {uploaded_file.name}")
 
 
-def view_doc_page():
+def view_doc_page(*args, **kwargs):
     st.title("View Uploaded Document")
     if "doc_text_content" not in st.session_state:
         st.text("No document has been uploaded yet")
     else:
+        st.markdown(
+            f"""
+Document is:
+- {len(st.session_state["doc_text_content"]):,} characters long
+- {len(st.session_state["doc_text_content"].split()):,} characters long
+- {st.session_state["doc_n_tokens"]:,} tokens long (using tokeniser \
+  '{st.session_state["tokeniser"].name}')
+"""
+        )
         st.text_area(
             label="Document Content",
             value=st.session_state["doc_text_content"],
@@ -262,19 +94,16 @@ def view_doc_page():
         )
 
 
-def chunk_doc_page():
+def chunk_doc_page(chunkers):
     st.title("Chunk Document")
     selected_chunker_name: str = st.selectbox(
         label="Select a Chonkie text chunker",
-        options=CHUNKERS.keys(),
+        options=chunkers.keys(),
     )
-    chunker_def: Optional[ChunkerDef] = CHUNKERS[selected_chunker_name]
-    if chunker_def is None or chunker_def.chunker is None:
-        st.warning(
-            f"I have not implemented the '{selected_chunker_name}' chunker in this app yet"
-        )
-        if chunker_def.explanation is not None:
-            st.markdown(chunker_def.explanation)
+    chunker_def: Optional[ChunkerDef] = chunkers[selected_chunker_name]
+    if chunker_def.chunker is None:
+        st.warning("Not Implemented")
+        st.markdown(chunker_def.explanation)
 
     else:
         st.markdown(chunker_def.explanation)
@@ -300,20 +129,300 @@ def chunk_doc_page():
                 )
 
 
-PAGES: Final[dict[str, Callable]] = {
-    "Upload Doc": upload_doc_page,
-    "View Uploaded Doc": view_doc_page,
-    "Chunk Doc": chunk_doc_page,
-}
-
-if __name__ == "__main__":
+def main():
     st.set_page_config(
         page_title="Chonkie Visualiser",
         layout="wide",
         initial_sidebar_state="expanded",
     )
 
+    if "tokeniser" not in st.session_state:
+        st.session_state["tokeniser"] = tiktoken.get_encoding("o200k_base")
+
+    class ChunkerDef(BaseModel):
+        model_config = ConfigDict(arbitrary_types_allowed=True)
+
+        chunker: type[chonkie.BaseChunker] | Callable | None = None
+        explanation: str
+        streamlit_input_controls: dict[str, Callable] | None = None
+        hardcoded_chunker_kwargs: dict[str, Any] | None = None
+
+    CHUNKERS: Final[dict[str, Optional[ChunkerDef]]] = {
+        "Token Chunker": ChunkerDef(
+            chunker=chonkie.TokenChunker,
+            explanation="""
+Puts a fixed number of tokens in each chunk.
+
+| Arg           | Description                                    |
+|---------------|------------------------------------------------|
+| chunk_size    | Maximum number of tokens per chunk             |
+| chunk_overlap | Number of tokens shared by consecutive chunks  |
+
+    """.strip(),
+            streamlit_input_controls={
+                "chunk_size": partial(
+                    st.number_input,
+                    label="Chunk Size (n tokens)",
+                    min_value=1,
+                    value=512,
+                ),
+                "chunk_overlap": partial(
+                    st.number_input,
+                    label="Chunk Overlap (n tokens)",
+                    min_value=0,
+                    value=0,
+                ),
+            },
+            hardcoded_chunker_kwargs={"tokenizer": st.session_state["tokeniser"]},
+        ),
+        "Sentence Chunker": ChunkerDef(
+            chunker=chonkie.SentenceChunker,
+            explanation="""
+Puts a fixed number of tokens in each chunk, ensuring complete sentences (won't split in the middle of a sentence)
+
+| Arg                     | Description
+|-------------------------|------------
+| chunk_size              | Maximum number of tokens per chunk
+| chunk_overlap           | Number of tokens shared by consecutive chunks
+| min_sentences_per_chunk | Minimum number of sentences allowed per chunk
+    """.strip(),
+            streamlit_input_controls={
+                "chunk_size": partial(
+                    st.number_input,
+                    label="Chunk Size (n tokens)",
+                    min_value=1,
+                    value=512,
+                ),
+                "chunk_overlap": partial(
+                    st.number_input,
+                    label="Chunk Overlap (n tokens)",
+                    min_value=0,
+                    value=0,
+                ),
+                "min_sentences_per_chunk": partial(
+                    st.number_input,
+                    label="Minimum n Sentences in Chunk",
+                    min_value=1,
+                    value=1,
+                ),
+            },
+            hardcoded_chunker_kwargs={
+                "tokenizer_or_token_counter": st.session_state["tokeniser"]
+            },
+        ),
+        "Recursive Chunker": ChunkerDef(
+            chunker=chonkie.RecursiveChunker.from_recipe,
+            explanation="""
+Continues to split chunks until they contain less than `chunk_size` tokens.
+
+It works sequentially through a fixed list of delimiters, which by default is:
+
+1. Chunk by paragraph ('\\n\\n')
+
+2. Chunk by newline ('\\n')
+
+3. Chunk by sentence ('. ', '! ', '? ')
+
+4. Chunk by whitespace (' ')
+
+5. Chunk by characters
+
+| Arg                         | Description
+|-----------------------------|------------------------
+| chunk_size                  | Minimum number of tokens in a chunk
+| min_characters_per_chunk    | Minimum number of characters in a chunk
+| recipe                      | A predefined set of rules (see https://huggingface.co/datasets/chonkie-ai/recipes)
+    """.strip(),
+            streamlit_input_controls={
+                "chunk_size": partial(
+                    st.number_input,
+                    label="Maximum number of tokens in a chunk",
+                    min_value=1,
+                    value=512,
+                ),
+                "min_characters_per_chunk": partial(
+                    st.number_input,
+                    label="Minimum number of characters in a chunk",
+                    min_value=1,
+                    value=1,
+                ),
+                "name": partial(
+                    st.selectbox,
+                    label="Chosen recipe (rule set)",
+                    options=["default", "markdown"],
+                ),
+            },
+            hardcoded_chunker_kwargs={
+                "tokenizer_or_token_counter": st.session_state["tokeniser"],
+                "lang": "en",
+            },
+        ),
+        "Code Chunker": ChunkerDef(
+            explanation="""
+CodeChunker splits code using the structure (Abstract Syntax Tree) of the code.
+
+The AST is implemented using https://github.com/tree-sitter/tree-sitter. 
+
+This implementation supports any programming language in `tree-sitter-language-pack`
+            """.strip()
+        ),
+        "Semantic Chunker": ChunkerDef(
+            chunker=chonkie.SemanticChunker,
+            explanation="""
+Splits text into chunks based on semantic similarity (using dense vectors).
+(i.e. semantically similar text will go into the same chunk)
+
+The algorithm is:
+
+1. Split the document into sentences (e.g. by splitting on ['. ', '? ', '! '])
+
+2. Group sequential sentences together (string concatenation of sentence text)
+
+3. Embed each sentence group into a semantic vector using a dense embedding model (e.g. model2vec)
+
+4. Calculate the vector distance between consecutive vectors (e.g. group 1 vs group 2, group 2 vs group 3, group 3 vs group 4...)
+
+5. Split into 2 chunks where the distance between 2 groups exceeds a chosen `threshold` value
+    """.strip(),
+            streamlit_input_controls={
+                "mode": partial(
+                    st.selectbox,
+                    label="mode: (method of grouping sentences)",
+                    options=["cumulative", "window"],
+                ),
+                "threshold": partial(
+                    st.number_input,
+                    label="threshold: (sentence similarity threshold)",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=0.5,
+                ),
+                "chunk_size": partial(
+                    st.number_input,
+                    label="chunk_size: (maximum number of tokens in a chunk)",
+                    min_value=0,
+                    value=512,
+                ),
+                "similarity_window": partial(
+                    st.number_input,
+                    label="similarity_window: (number of sentences to consider to similarity threshold calculation",
+                    min_value=1,
+                    value=1,
+                ),
+                "min_sentences": partial(
+                    st.number_input,
+                    label="min_sentences: (minimum number of sentences in a chunk)",
+                    min_value=1,
+                    value=1,
+                ),
+                "min_chunk_size": partial(
+                    st.number_input,
+                    label="min_chunk_size: (minimum number of tokens in a chunk)",
+                    min_value=1,
+                    value=2,
+                ),
+                "min_characters_per_sentence": partial(
+                    st.number_input,
+                    label="min_characters_per_sentence: (minimum number of characters in a sentence)",
+                    min_value=1,
+                    value=12,
+                ),
+                "threshold_step": partial(
+                    st.number_input,
+                    label="threshold_step: (step size for similarity threshold calculation)",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=0.01,
+                ),
+            },
+            hardcoded_chunker_kwargs={
+                "embedding_model": "minishlab/potion-base-8M",
+            },
+        ),
+        "SDPM Chunker": ChunkerDef(
+            explanation="""
+The SDPMChunker extends SemanticChunker by using a double-pass merging approach. 
+
+It first groups content by semantic similarity, then merges similar groups within a skip window, allowing it to connect related content that \
+may not be consecutive in the text. 
+
+This technique is particularly useful for documents with recurring themes or concepts spread apart.
+            """.strip()
+        ),
+        "Late Chunker": ChunkerDef(
+            explanation="""
+The LateChunker implements the late chunking strategy described in the \
+[Late Chunking](https://arxiv.org/abs/2409.04701) paper.
+
+It builds on top of the RecursiveChunker and uses document-level embeddings to create more \
+semantically rich chunk representations.
+
+Instead of generating embeddings for each chunk independently, the LateChunker first encodes \
+the entire text into a single embedding. It then splits the text using recursive rules and \
+derives each chunk’s embedding by averaging relevant parts of the full document embedding. \
+This allows each chunk to carry broader contextual information, improving retrieval performance \
+in RAG systems.
+    """.strip()
+        ),
+        "Neural Chunker": ChunkerDef(
+            explanation="""
+The NeuralChunker uses a fine-tuned BERT model specifically trained to identify semantic shifts \
+within text, allowing it to split documents at points where the topic or context changes \
+significantly. This provides highly coherent chunks ideal for RAG.
+
+The default model is [mirth/chonky_modernbert_base_1](https://huggingface.co/mirth/chonky_modernbert_base_1)
+    """.strip()
+        ),
+        "Slumber Chunker": ChunkerDef(
+            explanation="""
+This approach uses a large language model to decide how text should be chunked.
+
+I do not think that the implementation in this package (Chonkie) is particularly strong, and \
+I would implement this myself from first principles in practice.
+
+For example, Chonkie makes no use of structured outputs (e.g. https://github.com/567-labs/instructor) \
+to guarantee that the model returns JSON in the correct format, which is nowadays standard \
+practice.
+
+Here is the prompt which Chonkie uses:
+
+```
+<task> You are given a set of texts between the starting tag <passages> and ending tag </passages>.
+
+Each text is labeled as 'ID `N`' where 'N' is the passage number. 
+
+Your task is to find the first passage where the content clearly separates from the previous \
+passages in topic and/or semantics. </task>
+
+<rules>
+Follow the following rules while finding the splitting passage:
+- Always return the answer as a JSON parsable object with the 'split_index' key having a value \
+of the first passage where the topic changes.
+- Avoid very long groups of paragraphs. Aim for a good balance between identifying content \
+shifts and keeping groups manageable.
+- If no clear `split_index` is found, return N + 1, where N is the index of the last passage. 
+</rules>
+
+<passages>
+{passages}
+</passages>
+```
+            """.strip()
+        ),
+    }
+
+    PAGES: Final[dict[str, Callable]] = {
+        "Landing": landing_page,
+        "Upload Doc": upload_doc_page,
+        "View Uploaded Doc": view_doc_page,
+        "Chunk Doc": chunk_doc_page,
+    }
+
     st.sidebar.title("Navigation")
     selection = st.sidebar.radio("Go to", list(PAGES.keys()))
     page = PAGES[selection]
-    page()
+    page(chunkers=CHUNKERS)
+
+
+if __name__ == "__main__":
+    main()
