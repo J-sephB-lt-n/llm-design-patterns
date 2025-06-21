@@ -152,23 +152,17 @@ def main():
             chunker=chonkie.TokenChunker,
             explanation="""
 Puts a fixed number of tokens in each chunk.
-
-| Arg           | Description                                    |
-|---------------|------------------------------------------------|
-| chunk_size    | Maximum number of tokens per chunk             |
-| chunk_overlap | Number of tokens shared by consecutive chunks  |
-
     """.strip(),
             streamlit_input_controls={
                 "chunk_size": partial(
                     st.number_input,
-                    label="Chunk Size (n tokens)",
+                    label="chunk_size: (maximum number of tokens in a chunk)",
                     min_value=1,
                     value=512,
                 ),
                 "chunk_overlap": partial(
                     st.number_input,
-                    label="Chunk Overlap (n tokens)",
+                    label="chunk_overlap: (number of tokens shared/common between consecutive chunks)",
                     min_value=0,
                     value=0,
                 ),
@@ -179,29 +173,23 @@ Puts a fixed number of tokens in each chunk.
             chunker=chonkie.SentenceChunker,
             explanation="""
 Puts a fixed number of tokens in each chunk, ensuring complete sentences (won't split in the middle of a sentence)
-
-| Arg                     | Description
-|-------------------------|------------
-| chunk_size              | Maximum number of tokens per chunk
-| chunk_overlap           | Number of tokens shared by consecutive chunks
-| min_sentences_per_chunk | Minimum number of sentences allowed per chunk
     """.strip(),
             streamlit_input_controls={
                 "chunk_size": partial(
                     st.number_input,
-                    label="Chunk Size (n tokens)",
+                    label="chunk_size: (maximum number of tokens in a chunk)",
                     min_value=1,
                     value=512,
                 ),
                 "chunk_overlap": partial(
                     st.number_input,
-                    label="Chunk Overlap (n tokens)",
+                    label="chunk_overlap: (number of tokens shared/common between consecutive chunks)",
                     min_value=0,
                     value=0,
                 ),
                 "min_sentences_per_chunk": partial(
                     st.number_input,
-                    label="Minimum n Sentences in Chunk",
+                    label="min_sentences_per_chunk: (minimum number of sentences in a chunk)",
                     min_value=1,
                     value=1,
                 ),
