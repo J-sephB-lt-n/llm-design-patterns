@@ -83,7 +83,11 @@ TODO
 
 ## LLM Client
 
-TODO
+Example of a cost-tracking wrapper around the OpenAI API client:
+
+```bash
+uv run python llm_client/cost_tracking_llm_client.py
+```
 
 ## Memory
 
