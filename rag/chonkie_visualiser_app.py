@@ -104,12 +104,43 @@ def chunk_doc_page(chunkers):
     if chunker_def.chunker is None:
         st.warning("Not Implemented")
         st.markdown(chunker_def.explanation)
-
     else:
         st.markdown(chunker_def.explanation)
         user_chunker_kwargs: dict = {}
+
+        if chunker_def.chunker is chonkie.SemanticChunker:
+            threshold_mode = st.radio(
+                label="threshold_mode",
+                options=["cosine_similarity", "percentile", "auto"],
+            )
+            match threshold_mode:
+                case "cosine_similarity":
+                    chunker_def.streamlit_input_controls["threshold"] = partial(
+                        st.number_input,
+                        label="threshold: (sentence cosine similarity fixed cutoff value)",
+                        min_value=0.0,
+                        max_value=1.0,
+                        value=0.5,
+                    )
+                case "percentile":
+                    chunker_def.streamlit_input_controls["threshold"] = partial(
+                        st.number_input,
+                        label="threshold: (percentile of sentence cosine similarity scores cutoff)",
+                        min_value=1,
+                        max_value=99,
+                        value=95,
+                    )
+                case "auto":
+                    chunker_def.streamlit_input_controls["threshold"] = partial(
+                        st.radio,
+                        label="threshold = 'auto' (no further parameters here)",
+                        options=[
+                            "auto",
+                        ],
+                    )
         for argname, streamlit_control in chunker_def.streamlit_input_controls.items():
-            user_chunker_kwargs[argname] = streamlit_control()
+            if argname[0] != "_":
+                user_chunker_kwargs[argname] = streamlit_control()
 
         submit_button = st.button(label="Chunk Document with Selected Chunker")
 
@@ -260,17 +291,65 @@ This implementation supports any programming language in `tree-sitter-language-p
 Splits text into chunks based on semantic similarity (using dense vectors).
 (i.e. semantically similar text will go into the same chunk)
 
-The algorithm is:
+The originally proposed algorithm (by Greg Kamradt) is:
 
 1. Split the document into sentences (e.g. by splitting on ['. ', '? ', '! '])
 
-2. Group sequential sentences together (string concatenation of sentence text)
-
+2. Group sequential sentences together (i.e. literally concatenate the text from the sentences together)
+    
 3. Embed each sentence group into a semantic vector using a dense embedding model (e.g. model2vec)
 
-4. Calculate the vector distance between consecutive vectors (e.g. group 1 vs group 2, group 2 vs group 3, group 3 vs group 4...)
+4. Calculate the vector distance between consecutive vectors (e.g. group1 vs group2, group2 vs group3, group3 vs group4...)
 
 5. Split into 2 chunks where the distance between 2 groups exceeds a chosen `threshold` value
+
+6. Further split chunks (where necessary) to meet chunk size requirements
+
+#### Example of behavior of `sentence_window` in the [Chonkie implementation of SemanticChunker](https://github.com/chonkie-inc/chonkie/blob/main/src/chonkie/chunker/semantic.py):
+
+```python
+sentences = ["s1", "s2", "s3", "s4", "s5"]
+sentence_groups = {
+    "sentence_window=1": [
+        ("s1", "s2",),          # 1 neighbour on either side of "s1"
+        ("s1", "s2", "s3",),    # 1 neighbour on either side of "s2"
+        ("s2", "s3", "s4",),    # 1 neighbour on either side of "s3"
+        ("s3", "s4", "s5",),    # 1 neighbour on either side of "s4"
+        ("s4", "s5",),          # 1 neighbour on either side of "s5"
+    ],
+    "sentence_window=2": [
+        ("s1", "s2", "s3",),                # 2 neighbours on either side of "s1"
+        ("s1", "s2", "s3", "s4",),          # 2 neighbours on either side of "s2"
+        ("s1", "s2", "s3", "s4", "s5",),    # 2 neighbours on either side of "s3"
+        ("s2", "s3", "s4", "s5",),          # 2 neighbours on either side of "s4"
+        ("s3", "s4", "s5",),                # 2 neighbours on either side of "s5"
+    ],
+}
+```
+
+#### Explanation of `threshold_mode` (in the [Chonkie implementation of SemanticChunker](https://github.com/chonkie-inc/chonkie/blob/main/src/chonkie/chunker/semantic.py))
+
+- **cosine_similarity**:    Sentence group embeddings with a cosine similarity score less than a chosen fixed value \
+are split into separate chunks (e.g. threshold=0.3 means a split happens for cosine similarity values below 0.3)
+
+- **percentile**:           Sentence group embeddings with a cosine similarity score less than a chosen percentile \
+of similarity scores (e.g. threshold=95 means a split happens for cosine similarity values in the bottom 5% of \
+similarity values i.e. higher percentile threshold means fewer chunks)
+
+- **auto**:                 Uses binary search to find a threshold which results in chunks of size [min_chunk_size, chunk_size]
+
+#### Explanation of `mode` (in the [Chonkie implementation of SemanticChunker](https://github.com/chonkie-inc/chonkie/blob/main/src/chonkie/chunker/semantic.py))
+
+- **window**:     The original implementation as described above (Greg Kamradt's method). Each sentence group (embedding) is compared \
+to the sentence group (embedding) before it and a split happens if those 2 groups are different enough. i.e. a split (new chunk) happens \
+when there is a big semantic jump between 2 consecutive bits of text.
+
+- **cumulative**: Iteratively builds a chunk by keeping a rolling average embedding ("chunk centroid") upload_doc_pageross all sentence groups added to the chunk so far. \
+Then, a new chunk is started (a split) when the next sentence group is different enough from the chunk centroid. A new sentence group means \
+starting a new chunk centroid. i.e. a split appears when text appears which is different enough from all text in the chunk so far.
+
+The `window` approach is better for text which changes topic frequently. The `cumulative` approach is better for text which tends to meander \
+around a topic.
     """.strip(),
             streamlit_input_controls={
                 "mode": partial(
@@ -279,6 +358,8 @@ The algorithm is:
                     options=["cumulative", "window"],
                 ),
                 "threshold": partial(
+                    # this input type can change dynamically at runtime
+                    # (see 'if chunker_def.chunker is chonkie.SemanticChunker')
                     st.number_input,
                     label="threshold: (sentence similarity threshold)",
                     min_value=0.0,
@@ -293,8 +374,8 @@ The algorithm is:
                 ),
                 "similarity_window": partial(
                     st.number_input,
-                    label="similarity_window: (number of sentences to consider to similarity threshold calculation",
-                    min_value=1,
+                    label="similarity_window: (number of sentences on each side to include in group - see example above)",
+                    min_value=0,
                     value=1,
                 ),
                 "min_sentences": partial(
@@ -317,7 +398,7 @@ The algorithm is:
                 ),
                 "threshold_step": partial(
                     st.number_input,
-                    label="threshold_step: (step size for similarity threshold calculation)",
+                    label="threshold_step: (controls granularity of binary search when using threshold='auto')",
                     min_value=0.0,
                     max_value=1.0,
                     value=0.01,
