@@ -412,10 +412,14 @@ around a topic.
             explanation="""
 The SDPMChunker extends SemanticChunker by using a double-pass merging approach. 
 
-It first groups content by semantic similarity, then merges similar groups within a skip window, allowing it to connect related content that \
-may not be consecutive in the text. 
+How it works is to perform standard semantic chunking (SemanticChunker in this app) and then to afterward perform a \
+chunk merging step, in which nearby chunks which are semantically similar but have dissimilar chunk(s) inbetween them \
+can be combined into a single chunk.
 
-This technique is particularly useful for documents with recurring themes or concepts spread apart.
+This is useful in cases in which semantically very different but still very relevant text appears within a body of \
+semantically-related text. An example is a mathematical formula within a paragraph of text.
+
+There is a very good explanation of the approach [here](https://bitpeak.com/chunking-methods-in-rag-methods-comparison/)
             """.strip()
         ),
         "Late Chunker": ChunkerDef(
@@ -432,6 +436,16 @@ derives each chunk’s embedding by averaging relevant parts of the full documen
 This allows each chunk to carry broader contextual information, improving retrieval performance \
 in RAG systems.
     """.strip()
+        ),
+        "Cache-Augmented Generation (CAG)": ChunkerDef(
+            explanation="""
+CAG is not implemented in Chonkie but I really wanted to make a note of it here.
+
+CAG stores the entire knowledge base in the model context window, but precomputes the attention layer key/value \
+calculation so that it doesn't need to be recomputed for every user query.
+
+Here is the original CAG paper: https://arxiv.org/abs/2412.15605v1
+            """,
         ),
         "Neural Chunker": ChunkerDef(
             explanation="""
