@@ -437,16 +437,6 @@ This allows each chunk to carry broader contextual information, improving retrie
 in RAG systems.
     """.strip()
         ),
-        "Cache-Augmented Generation (CAG)": ChunkerDef(
-            explanation="""
-CAG is not implemented in Chonkie but I really wanted to make a note of it here.
-
-CAG stores the entire knowledge base in the model context window, but precomputes the attention layer key/value \
-calculation so that it doesn't need to be recomputed for every user query.
-
-Here is the original CAG paper: https://arxiv.org/abs/2412.15605v1
-            """,
-        ),
         "Neural Chunker": ChunkerDef(
             explanation="""
 The NeuralChunker uses a fine-tuned BERT model specifically trained to identify semantic shifts \

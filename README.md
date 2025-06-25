@@ -168,6 +168,18 @@ Here is my implementation (I learned about this from [instructor](https://github
 uv run python -m structured_outputs.pydantic_schema_dump_retry
 ```
 
+## Text Chunking
+
+[Text chunking](#text-chunking) refers to the process of splitting text into pieces, so that relevant pieces can be retrieved and injected into a language model prompt.
+
+It is a core component of [Retrieval Augmented Generation (RAG)](https://en.wikipedia.org/wiki/Retrieval-augmented_generation)
+
+I have built a local web app (streamlit) which you can use to explore various different chunking methods:
+
+```bash
+uv run streamlit run rag/chonkie_visualiser_app.py
+```
+
 ## Tool Use (function-calling)
 
 ```bash
