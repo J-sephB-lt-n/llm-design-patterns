@@ -4,11 +4,8 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 authors = [{ name = "J-sephB-lt-n", email = "joseph.jazz.bolton@gmail.com" }]
-requires-python = ">=3.13"
-dependencies = [
-    "fastmcp>=2.9.0",
-    "mcp[cli]>=1.9.4",
-]
+requires-python = ">=3.12,<3.14"
+dependencies = ["fastmcp>=2.9.0", "mcp[cli]>=1.9.4"]
 
 [project.scripts]
 custom-mcp-server = "custom_mcp_server.main:main"

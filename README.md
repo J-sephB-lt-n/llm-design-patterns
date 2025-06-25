@@ -16,7 +16,7 @@ My main sources have been:
 
 Throughout this repo, I usually refer to Large Language Models as *LLM*s.
 
-The most fundamental rule for using LLMs effectively is *make their scope as narrow as possible*. The more agency you give to a LLM, the more failure modes you introduce into your application. For parts of your program which can be solved without an LLM, do not use an LLM (LLMs are slow, stochastic and expensive - and they always will be).
+The most fundamental rule for using LLMs effectively is to *make their scope as narrow as possible*. The more agency you give to a LLM, the more failure modes you introduce into your application. For parts of your program which can be solved without an LLM, do not use an LLM (LLMs are slow, stochastic and expensive - and they always will be).
 
 | Contents                 |
 |--------------------------|
@@ -25,6 +25,7 @@ The most fundamental rule for using LLMs effectively is *make their scope as nar
 | [Evaluator Optimiser (Reflection)](#evaluator-optimiser-reflection) |
 | [LLM Client](#llm-client) |
 | [Memory](#memory) | 
+| [Model Context Protocol (MCP)](#model-context-protocol-mcp) |
 | [Multimodal Input/Output](#multimodal-inputoutput) |
 | [Orchestrator and Workers](#orchestrator-and-workers) |
 | [Parallel Processing](#parallel-processing) |
@@ -107,8 +108,17 @@ There are various different approaches to manual memory management. Here is very
 | Periodic Summarisation | Every time the chat history gets X messages (or tokens) long, reduce it's size by using the LLM to summarise it (could be summarised at every step). Include the summarised history in the input prompt each time |
 | External messages store | Store the conversation history in an external system (e.g. vector database) and fetch the most relevant messages each time (insert them into the input prompt). There are many ways to measure relevance (vector similarity, recency, LLM-assigned memory importance rating) |
 | Hybrid | Any combination of the previously mentioned memory approaches (e.g. both a sliding window of most recent messages and an external vector database containing long-term memories) | 
+| MemGPT | |
+| mem0 | |
+| zep | |
 
 Another approach which I've found to be highly effective is to design the user/LLM application interface specifically around NOT USING MEMORY i.e. make the chatbot "1-shot", and if the user wants something slightly different they can just modify their input prompt and have another go on a fresh LLM.
+
+## Model Context Protocol (MCP)
+
+A MCP server allows the agent in your IDE (e.g. cursor or roo code) or any other MCP-compatible client to use your custom-defined python functions.
+
+There is a working example in [./model_context_protocol/custom_mcp_server/](/model_context_protocol/custom_mcp_server) - start with [./model_context_protocol/custom_mcp_server/README.md](./model_context_protocol/custom_mcp_server/README.md).
 
 ## MultiModal Input/Output
 
