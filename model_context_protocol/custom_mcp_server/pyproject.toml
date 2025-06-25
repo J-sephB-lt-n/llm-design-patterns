@@ -1,0 +1,21 @@
+[project]
+name = "custom-mcp-server"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [{ name = "J-sephB-lt-n", email = "joseph.jazz.bolton@gmail.com" }]
+requires-python = ">=3.13"
+dependencies = [
+    "fastmcp>=2.9.0",
+    "mcp[cli]>=1.9.4",
+]
+
+[project.scripts]
+custom-mcp-server = "custom_mcp_server.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = ["ipython>=9.3.0"]

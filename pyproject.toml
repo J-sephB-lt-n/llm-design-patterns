@@ -16,4 +16,4 @@ dev = [
 ]
 
 [tool.uv.workspace]
-members = ["memory", "rag", "structured_outputs", "tool_use"]
+members = ["memory", "rag", "structured_outputs", "tool_use", "mcp/custom_mcp_server"]
