@@ -1,5 +1,5 @@
 """
-MCP tool for generating a profound poem
+MCP tool for generating simulated dice roll results
 """
 
 import random
