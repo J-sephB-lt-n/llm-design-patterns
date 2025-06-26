@@ -12,7 +12,7 @@ You can experiment with the tools in a local web app by running:
 | linux            | windows 
 |------------------|-------------
 | `cd llm-design-patterns/model_context_protocol/custom_mcp_server` | `cd .\llm-design-patterns\model_context_protocol\custom_mcp_server` |
-| `uv run mcp dev src/custom_mcp_server/main.py` | `uv run mcp dev .\src\custom_mcp_server\main.py` |
+| `uv run mcp dev src/custom_mcp_server/main.py` | `uv run mcp dev .\\src\\custom_mcp_server\\main.py` |
 
 ## Make this MCP server available to roo code in vs-code (or any other MCP-compatible IDE/platform):
 
