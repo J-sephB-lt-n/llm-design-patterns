@@ -16,3 +16,38 @@ Plan:
 - algs all follow a fixed protocol
 
 - can add new algs using a decorator
+
+Project structure:
+```bash
+.
+├── 📁 app/                         
+│   │
+│   ├── 📁 memory/                  # Different memory algorithms (e.g. buffer, vector, etc.)
+│   │   ├── alg1.py         
+│   │   ├── alg2.py         
+│   │   └── ...             
+│   │
+│   ├── 📁 interfaces/             # Interfaces/protocols/abstract classes
+│   │   ├── memory_protocol.py     
+│   │   ├── vector_db_protocol.py           
+│   │   └── ...
+│   │
+│   ├── 📁 db/                    # Specific database implementation
+│   │   ├── lancedb.py           
+│   │   └── ...
+│   │
+│   ├── 📁 services/               # Business logic
+│   │   └── ...
+│   │
+│   ├── 📁 utils/                  # Helper functions/utilities (e.g. logging)
+│   │   └── ...
+│   │
+├── 📁 temp_storage/              # For temporary local files (e.g., SQLite .db, logs)
+│   │   └── ...
+│   │
+├── 📁 tests/                     # Unit and integration tests
+│   └── ...
+│
+├── 📄 main.py                    # Entrypoint for Streamlit (`streamlit run main.py`)
+```
+```
