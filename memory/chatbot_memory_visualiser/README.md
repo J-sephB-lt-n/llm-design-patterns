@@ -22,13 +22,13 @@ Project structure:
 .
 ├── 📁 app/                         
 │   │
-│   ├── 📁 memory/                  # Different memory algorithms (e.g. buffer, vector, etc.)
+│   ├── 📁 memory_algs/                  # Different memory algorithms (e.g. buffer, vector, etc.)
 │   │   ├── alg1.py         
 │   │   ├── alg2.py         
 │   │   └── ...             
 │   │
 │   ├── 📁 interfaces/             # Interfaces/protocols/abstract classes
-│   │   ├── memory_protocol.py     
+│   │   ├── memory_alg_protocol.py     
 │   │   ├── vector_db_protocol.py           
 │   │   └── ...
 │   │
