@@ -6,8 +6,9 @@ readme = "README.md"
 requires-python = ">=3.12, <3.14"
 dependencies = [
     "httpx>=0.28.1",
+    "loguru>=0.7.3",
     "openai>=1.92.3",
- "streamlit>=1.46.1",
+    "streamlit>=1.46.1",
 ]
 
 [dependency-groups]
