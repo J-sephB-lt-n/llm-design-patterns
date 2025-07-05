@@ -4,10 +4,15 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12, <3.14"
-dependencies = ["openai>=1.92.3", "streamlit>=1.46.1"]
+dependencies = [
+    "httpx>=0.28.1",
+    "openai>=1.92.3",
+ "streamlit>=1.46.1",
+]
 
 [dependency-groups]
 dev = [
+    "ipython>=9.4.0",
     "pylint>=3.3.7",
     "ruff>=0.12.1",
 ]
