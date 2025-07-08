@@ -9,6 +9,8 @@ import httpx
 import streamlit as st
 from loguru import logger
 
+from app.memory_algs import memory_algs
+
 
 def landing_page():
     st.title("Landing Page")
@@ -47,6 +49,10 @@ def setup_page():
         st.session_state.llm_params_saved = False
         st.session_state.llm_name = ""
         st.session_state.llm_temperature = 1.0
+
+    if "memory_alg_is_selected" not in st.session_state:
+        st.session_state.memory_alg_is_selected = False
+        st.session_state.memory_alg = ""
 
     with st.form(key="llm_api_setup_form"):
         llm_api_base_url = st.text_input(
@@ -111,11 +117,38 @@ def setup_page():
                 st.session_state.llm_params_saved = True
                 st.success("Model parameters saved successfully")
 
+    if not st.session_state.llm_params_saved:
+        return
+
+    with st.form(key="memory_alg_setup_form"):
+        memory_alg_name = st.selectbox(
+            "Memory Algorithm",
+            memory_algs,
+            index=(
+                list(memory_algs).index(st.session_state.memory_alg)
+                if st.session_state.memory_alg
+                else None
+            ),
+        )
+        submit_memory_alg_select = st.form_submit_button(
+            label="Confirm Selected Memory Algorithm"
+        )
+        if submit_memory_alg_select:
+            if memory_alg_name is None:
+                st.error("Please select a memory algorithm")
+            else:
+                st.session_state.memory_alg_is_selected = True
+                st.session_state.memory_alg = memory_alg_name
+                st.success(f"Selected memory algorithm [{st.session_state.memory_alg}]")
+
 
 def chat_page():
     st.title("Chat")
-    if not st.session_state.get("llm_settings_saved"):
-        st.error("Please run model setup first")
+    if not all(
+        st.session_state.get(x)
+        for x in ("llm_api_is_valid", "llm_params_saved", "memory_alg_is_selected")
+    ):
+        st.error("Please complete setup")
         return
 
 

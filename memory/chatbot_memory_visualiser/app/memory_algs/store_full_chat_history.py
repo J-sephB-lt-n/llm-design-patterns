@@ -46,7 +46,10 @@ class StoreFullChatHistory(MemoryAlg):
         chat_msgs_to_llm: list[dict] = [
             msg.model_dump() for msg in self.chat_history[-1].all_messages
         ]
-        user_msg = ChatMessage(role="user", content=user_msg)
+        user_msg = ChatMessage(
+            role="user",
+            content=user_msg,
+        )
         chat_msgs_to_llm.append(user_msg.model_dump())
         llm_response = self.llm_client.chat.completions.create(
             model=self.llm_name,
