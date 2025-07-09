@@ -9,6 +9,7 @@ import httpx
 import streamlit as st
 from loguru import logger
 
+from app.interfaces.memory_alg_protocol import ChatMessageDetail
 from app.memory_algs import memory_algs
 
 
@@ -35,6 +36,23 @@ def fetch_llm_names(base_url: str, api_key: str) -> list[str] | None:
     except Exception:
         logger.exception("Unexpected error")
         return None
+
+
+def display_chat_history(chat_history: list[ChatMessageDetail]) -> None:
+    """
+    Render `chat_history` as a chatbot-style conversation in the streamlit app
+    """
+    for interaction in chat_history:
+        with st.expander("Show internal chat messages", expanded=False):
+            for msg in interaction.all_messages:
+                with st.chat_message(msg.role):
+                    st.markdown(msg.content)
+        with st.expander("Show token usage", expanded=False):
+            st.json(interaction.token_usage)
+        for msg in interaction.visible_messages:
+            with st.chat_message(msg.role):
+                st.markdown(msg.content)
+    st.divider()
 
 
 def setup_page():
