@@ -47,6 +47,6 @@ class MemoryAlg(Protocol):
 
     def view_memory_as_json(self) -> dict:
         """
-        Render current state of the agent's memory as a dict
+        Render latest state of the agent's memory as a dict
         """
         ...

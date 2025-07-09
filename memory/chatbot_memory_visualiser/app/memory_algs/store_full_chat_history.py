@@ -20,10 +20,10 @@ class StoreFullChatHistory(MemoryAlg):
         llm_temperature: float,
     ) -> None:
         self.chat_history: list[ChatMessageDetail] = []
+        self.system_prompt: str | None = system_prompt
         self.llm_client = llm_client
         self.llm_name: str = llm_name
         self.llm_temperature = llm_temperature
-        self.system_prompt: str | None = system_prompt
 
         if self.system_prompt:
             self.chat_history.append(
@@ -51,14 +51,25 @@ class StoreFullChatHistory(MemoryAlg):
             content=user_msg,
         )
         chat_msgs_to_llm.append(user_msg.model_dump())
-        llm_response = self.llm_client.chat.completions.create(
+        llm_api_response = self.llm_client.chat.completions.create(
             model=self.llm_name,
             temperature=self.llm_temperature,
             messages=chat_msgs_to_llm,
         )
-        chat_msgs_to_llm.append(
-            {
-                "role": llm_response.choices[0].message.role,
-                "content": llm_response.choices[0].message.content,
-            }
+        llm_reply = ChatMessage(
+            role=llm_api_response.choices[0].message.role,
+            content=llm_api_response.choices[0].message.content,
         )
+        self.chat_history.append(
+            ChatMessageDetail(
+                visible_messages=[user_msg, llm_reply],
+                all_messages=[ChatMessage(**msg) for msg in chat_msgs_to_llm],
+                token_usage=llm_api_response.usage.model_dump(),
+            )
+        )
+
+    def view_memory_as_json(self) -> dict:
+        """
+        Render latest state of the agent's memory as a dict
+        """
+        return self.chat_history[-1].model_dump()
