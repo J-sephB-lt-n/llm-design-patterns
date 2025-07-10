@@ -25,5 +25,5 @@ members = [
   "rag",
   "structured_outputs",
   "tool_use",
-  "mcp/custom_mcp_server",
+  "mcp/custom_mcp_server", "memory/chatbot_memory_visualiser",
 ]

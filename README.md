@@ -152,9 +152,15 @@ uv run python -m prompt_chaining.step_back_prompting_example
 
 ## Retrieval-Augmented Generation (RAG)
 
+[Retrieval-Augmented Generation (RAG)](#retrieval-augmented-generation-rag) means fetching information/data related to the user query and including this as context in the LLM prompt.
+
+You can often get away with using a small fast local embedding model and a small fast local vector database. Here is an example of this (model2vec for embeddings, lancedb as vector DB):
+
 ```bash
-uv run streamlit run rag/chonkie_visualiser_app.py
+uv run python rag/local_embed_local_vector_db.py
 ```
+
+An important part of RAG is how the data to be retrieved is processed, stored and indexed. Refer also to the [text chunking](#text-chunking) section.
 
 ## Routing
 
