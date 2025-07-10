@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Final
 
 import httpx
+import openai
 import streamlit as st
 from loguru import logger
 
@@ -61,6 +62,7 @@ def setup_page():
         st.session_state.llm_api_is_valid = False
         st.session_state.llm_api_base_url = ""
         st.session_state.llm_api_key = ""
+        st.session_state.llm_client = None
         st.session_state.available_llm_names = []
 
     if "llm_params_saved" not in st.session_state:
@@ -70,7 +72,8 @@ def setup_page():
 
     if "memory_alg_is_selected" not in st.session_state:
         st.session_state.memory_alg_is_selected = False
-        st.session_state.memory_alg = ""
+        st.session_state.memory_alg_name = ""
+        st.session_state.memory_alg = None
 
     with st.form(key="llm_api_setup_form"):
         llm_api_base_url = st.text_input(
@@ -101,6 +104,10 @@ def setup_page():
             st.session_state.llm_params_saved = False  # new model API
             st.session_state.llm_name = ""  # new model API
             st.session_state.llm_temperature = 1.0  # new model API
+            st.session_state.llm_client = openai.OpenAI(
+                base_url=st.session_state.llm_api_base_url,
+                api_key=st.session_state.llm_api_key,
+            )
             st.success(f"Model API is Valid (found {len(llm_names)} models)")
 
     if not st.session_state.llm_api_is_valid:
@@ -143,8 +150,8 @@ def setup_page():
             "Memory Algorithm",
             memory_algs,
             index=(
-                list(memory_algs).index(st.session_state.memory_alg)
-                if st.session_state.memory_alg
+                list(memory_algs).index(st.session_state.memory_alg_name)
+                if st.session_state.memory_alg_name
                 else None
             ),
         )
@@ -156,8 +163,16 @@ def setup_page():
                 st.error("Please select a memory algorithm")
             else:
                 st.session_state.memory_alg_is_selected = True
-                st.session_state.memory_alg = memory_alg_name
-                st.success(f"Selected memory algorithm [{st.session_state.memory_alg}]")
+                st.session_state.memory_alg_name = memory_alg_name
+                st.session_state.memory_alg = memory_algs[memory_alg_name](
+                    llm_client=st.session_state.llm_client,
+                    llm_name=st.session_state.llm_name,
+                    llm_temperature=st.session_state.llm_temperature,
+                    system_prompt=None,
+                )
+                st.success(
+                    f"Selected memory algorithm [{st.session_state.memory_alg_name}]"
+                )
 
 
 def chat_page():
@@ -168,6 +183,14 @@ def chat_page():
     ):
         st.error("Please complete setup")
         return
+
+    display_chat_history(st.session_state.memory_alg.chat_history)
+    if user_input := st.chat_input("Enter your response"):
+        with st.chat_message("user"):
+            st.markdown(user_input)
+        with st.spinner():
+            st.session_state.memory_alg.chat(user_msg=user_input)
+        st.rerun()
 
 
 def main():

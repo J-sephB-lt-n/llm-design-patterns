@@ -35,9 +35,9 @@ class MemoryAlg(Protocol):
     Required behaviour of a chat-based memory algorithm
     """
 
+    llm_client: openai.OpenAI
     chat_history: list[ChatMessageDetail]
     system_prompt: str | None
-    llm_client: openai.OpenAI
 
     def chat(self, user_msg: str) -> None:
         """

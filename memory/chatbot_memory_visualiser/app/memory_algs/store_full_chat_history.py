@@ -14,16 +14,16 @@ class StoreFullChatHistory(MemoryAlg):
 
     def __init__(
         self,
-        system_prompt: str | None,
         llm_client: openai.OpenAI,
         llm_name: str,
         llm_temperature: float,
+        system_prompt: str | None = None,
     ) -> None:
         self.chat_history: list[ChatMessageDetail] = []
-        self.system_prompt: str | None = system_prompt
         self.llm_client = llm_client
         self.llm_name: str = llm_name
         self.llm_temperature = llm_temperature
+        self.system_prompt: str | None = system_prompt
 
         if self.system_prompt:
             self.chat_history.append(
@@ -43,9 +43,11 @@ class StoreFullChatHistory(MemoryAlg):
         """
         Process a new user message, update memory and chat history
         """
-        chat_msgs_to_llm: list[dict] = [
-            msg.model_dump() for msg in self.chat_history[-1].all_messages
-        ]
+        chat_msgs_to_llm: list[dict] = (
+            [msg.model_dump() for msg in self.chat_history[-1].all_messages]
+            if self.chat_history
+            else []
+        )
         user_msg = ChatMessage(
             role="user",
             content=user_msg,
