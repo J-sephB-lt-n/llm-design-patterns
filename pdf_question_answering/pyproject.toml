@@ -1,0 +1,15 @@
+[project]
+name = "pdf-question-answering"
+version = "0.1.0"
+description = "PDF Question Answering application using multimodal LLM"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "openai>=1.93.3",
+    "pymupdf>=1.26.3",
+    "streamlit>=1.32.0",
+    "python-dotenv>=1.0.0",
+    "loguru>=0.7.3",
+    "httpx>=0.28.1",
+]
+
