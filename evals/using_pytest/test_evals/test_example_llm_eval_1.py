@@ -1,33 +1,6 @@
 """
-Lightweight model evaluations can live alongside the standard software tests in pytest
-
-e.g.
-
-tests/
-├── end2end/
-│   ├── end2end_test1_name.py
-│   └── ...
-├── integration/
-│   ├── integration_test1_name.py
-│   └── ...
-├── llm_evals/                       < ---------- this one
-│   ├── llm_eval1_name.py
-│   └── ...
-└── unit/
-    ├── unit_test1_name.py
-    └── ...
-
-Run this example test script using:
-    uv run pytest evals/test_basic_evals_using_pytest.py --model gpt-4o --temp 0
-
-Notes:
-    - pytest "fixtures" are resources which are created once and shared by multiple tests
-        (e.g. environment variables, datasets, network connections etc.)
-    - Where you have many evals, rather put them into multiple independent test_*.py scripts
-        - They can share setup config by giving them a shared `conftest.py` script
-            (e.g. all test scripts can use the same LLM config supplied once)
-        - You can have multiple conftest.py files (each applies to the test folder it's in)
-    - Not shown here, but pytest can be set up to write the results to an experiment tracking platform e.g. MLFlow or wandb
+Example LLM model evaluations using pytest
+(uses some of the assets and configuration defined in conftest.py e.g. `test_logger`)
 """
 
 import re
@@ -46,7 +19,7 @@ def eval_data(test_logger):
     (loaded once at start and will be available to all tests)
     """
     # this example creates the data in place.
-    # You'd like load from file or blob storage here in a real app
+    # You'd likely load from file or blob storage here in a real app
     examples: list[dict] = [
         {
             "input": "6 * 9",
@@ -91,9 +64,9 @@ def chat_completion_text(
 def test_evaluate_llm_arithmetical_accuracy(
     # specify which fixtures this test needs #
     eval_data,
-    llm_client,
-    llm_params,
-    test_logger,
+    llm_client,  # from conftest.py
+    llm_params,  # from conftest.py
+    test_logger,  # from conftest.py
 ):
     answer_correct_count: list[bool] = []
 
@@ -109,9 +82,6 @@ def test_evaluate_llm_arithmetical_accuracy(
             "",
             llm_response_text,
         )
-        # assert (
-        #     example["correct_answer"] in llm_response_only_numbers
-        # ), f'Expected {example["correct_answer"]} in LLM response. LLM response:\n{llm_response_text}'
         if example["correct_answer"] in llm_response_only_numbers:
             answer_correct_count.append(True)
         else:
@@ -124,3 +94,6 @@ def test_evaluate_llm_arithmetical_accuracy(
     assert accuracy_metric >= 0.8, (
         f"Required LLM accuracy on multiplication is 0.5 - observed accuracy={accuracy_metric}"
     )
+
+
+# ... can add more tests here by defining more test_*() functions
