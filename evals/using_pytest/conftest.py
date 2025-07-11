@@ -2,6 +2,7 @@
 Configuration shared by all pytest scripts in this folder (and it's subfolders)
 """
 
+import logging
 import os
 from datetime import datetime
 from pathlib import Path
@@ -10,7 +11,6 @@ from typing import Final
 import dotenv
 import openai
 import pytest
-from loguru import logger
 
 
 # get test (experiment) parameters from the user
@@ -33,7 +33,6 @@ def pytest_addoption(parser):
     )
 
 
-# # r and log test (experiment) parameters
 # def pytest_configure(config):
 #     """
 #     Code which runs before any tests start
@@ -58,14 +57,24 @@ def test_logger(pytestconfig):
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"{datetime.now():%Y%m%d_%H%M%S}.log"
 
-    logger.add(
-        log_path,
-        level="INFO",
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level:^7} | {message}",
-        rotation=None,  # overwrite each run
-        backtrace=True,  # include full tracebacks
-        diagnose=False,  # no extra debug fluff
-    )
+    logger = logging.getLogger("TEST_LOGGER")
+    log_level = logging.INFO
+    log_format = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
+    logger.setLevel(log_level)
+
+    # Create a file handler
+    file_handler = logging.FileHandler("log_file.log")
+    file_handler.setLevel(log_level)
+    file_handler.setFormatter(log_format)
+
+    # Create a stream handler
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(log_level)
+    stream_handler.setFormatter(log_format)
+
+    # Add handlers to the logger
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
 
     logger.info(
         "\n=== Started LLM Evals ===\n\n"
@@ -74,18 +83,20 @@ def test_logger(pytestconfig):
         f"    temperature: {llm_temp}\n"
     )
 
-    return logger
+    yield logger
+
+    logger.info("\n=== Finished LLM Evals ===\n")
 
 
-def pytest_sessionfinish(session, exitstatus):
-    """
-    This code runs after all tests have finished
-    """
-    logger.info(
-        """
-        === Finished LLM Evals ===
-        """
-    )
+# def pytest_sessionfinish(session, exitstatus):
+#     """
+#     This code runs after all tests have finished
+#     """
+#     test_logger.info(
+#         """
+#         === Finished LLM Evals ===
+#         """
+#     )
 
 
 # Put model parameters into a fixture so multiple tests can refer to them #

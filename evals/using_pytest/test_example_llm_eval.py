@@ -17,7 +17,7 @@ tests/
     ├── unit_test1_name.py
     └── ...
 
-Run this example test script using: 
+Run this example test script using:
     uv run pytest evals/test_basic_evals_using_pytest.py --model gpt-4o --temp 0
 
 Notes:
@@ -102,16 +102,16 @@ def test_evaluate_llm_arithmetical_accuracy(
             llm_client=llm_client,
             model_name=llm_params["llm_name"],
             model_temperature=llm_params["llm_temp"],
-            user_message=f'Please solve the following multiplication problem: {example["input"]}',
+            user_message=f"Please solve the following multiplication problem: {example['input']}",
         )
         llm_response_only_numbers: str = re.sub(
             r"[^\d]+",  # remove all characters in response other than numbers
             "",
             llm_response_text,
         )
-        assert (
-            example["correct_answer"] in llm_response_only_numbers
-        ), f'Expected {example["correct_answer"]} in LLM response. LLM response:\n{llm_response_text}'
+        # assert (
+        #     example["correct_answer"] in llm_response_only_numbers
+        # ), f'Expected {example["correct_answer"]} in LLM response. LLM response:\n{llm_response_text}'
         if example["correct_answer"] in llm_response_only_numbers:
             answer_correct_count.append(True)
         else:
@@ -121,6 +121,6 @@ def test_evaluate_llm_arithmetical_accuracy(
 
     test_logger.info(f"LLM ACCURACY METRIC: {accuracy_metric}")
 
-    assert (
-        accuracy_metric >= 0.5
-    ), f"Required LLM accuracy on multiplication is 0.5 - observed accuracy={accuracy_metric}"
+    assert accuracy_metric >= 0.8, (
+        f"Required LLM accuracy on multiplication is 0.5 - observed accuracy={accuracy_metric}"
+    )
