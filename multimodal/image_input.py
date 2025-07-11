@@ -1,3 +1,7 @@
+"""
+Example of including text and image in the model prompt in an openai-compatible chat completions API request
+"""
+
 import base64
 import os
 from pathlib import Path

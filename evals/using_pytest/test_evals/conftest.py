@@ -24,12 +24,14 @@ def pytest_addoption(parser):
         action="store",
         type=str,
         help="Large Language Model name",
+        required=True,
     )
     parser.addoption(
         "--temp",
         action="store",
         type=float,
         help="Large Language Model temperature",
+        required=True,
     )
 
 
@@ -77,7 +79,7 @@ def test_logger(pytestconfig):
 
     yield logger
 
-    logger.info("\n=== Finished LLM Evals ===\n")
+    logger.info("\n\n=== Finished LLM Evals ===\n")
 
 
 # Put model parameters into a fixture so multiple tests can refer to them #

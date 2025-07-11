@@ -33,7 +33,7 @@ def doc_to_text(
     if not DOCLING_MODELS_PATH.exists():
         if verbose:
             print(f"Downloading docling models to {DOCLING_MODELS_PATH}")
-        download_models()
+        download_models(DOCLING_MODELS_PATH)
 
     file_content_buf = BytesIO(doc_file_content)
     doc_stream = DocumentStream(

@@ -29,9 +29,11 @@ def inject_structured_output_prompt_instructions(
 ) -> list[dict]:
     """
     Appends structured output instructions instructions to the last message in `messages`
-    (instructions on
+    (instructions on required output format)
     """
-    SCHEMA_REQUIREMENT_INSTRUCTION: Final[str] = f"""
+    SCHEMA_REQUIREMENT_INSTRUCTION: Final[
+        str
+    ] = f"""
 Your response must include a single JSON markdown code block (containing valid JSON) whose \
 contents adheres to the following constraints:
 <non-negotiable-response-json-constraints>
@@ -44,12 +46,24 @@ The contents of your JSON response will be parsed using python pydantic with the
 `{data_model.__name__}.model_validate_json()`, \
 and doing so must not raise a pydantic.ValidationError.
         """
-    return messages[:-1] + [
-        {
-            "role": messages[-1]["role"],
-            "content": messages[-1]["content"] + "\n" + SCHEMA_REQUIREMENT_INSTRUCTION,
-        }
-    ]
+    msg_to_augment = messages[-1]
+    match msg_to_augment["content"]:
+        case str():  # text-only input
+            ...
+        case list():  # multimodal input
+            ...
+        case _:
+            raise ValueError(
+                'unexpected type: type(messages[-1]["content"]) is '
+                + f'{type(messages[-1]["content"])}'
+            )
+
+    # return messages[:-1] + [
+    #     {
+    #         "role": messages[-1]["role"],
+    #         "content": messages[-1]["content"] + "\n" + SCHEMA_REQUIREMENT_INSTRUCTION,
+    #     }
+    # ]
 
 
 def structured_output_chat_completion(
