@@ -33,5 +33,5 @@ To run the tests:
 ```bash
 cd evals/using_pytest/
 uv run pytest test_evals/ --model gpt-4o --temp 0 # run all tests in this folder
-uv run pytest test_evals/test_example_llm_eval_1.py # run all tests in this script
+uv run pytest test_evals/test_example_llm_eval_1.py --model gpt-4o --temp 0 # run all tests in this script
 ```

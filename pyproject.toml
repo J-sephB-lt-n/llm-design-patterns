@@ -31,5 +31,5 @@ members = [
   "rag",
   "structured_outputs",
   "tool_use",
-  "mcp/custom_mcp_server", "memory/chatbot_memory_visualiser", "evals/using_pytest",
+  "mcp/custom_mcp_server", "memory/chatbot_memory_visualiser", "evals/using_pytest", "pdf_question_answering",
 ]

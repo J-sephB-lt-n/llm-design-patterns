@@ -26,6 +26,7 @@ The most fundamental rule for using LLMs effectively is to *make their scope as 
 | [LLM Client](#llm-client) |
 | [Memory](#memory) | 
 | [Model Context Protocol (MCP)](#model-context-protocol-mcp) |
+| [Model Evaluation](#model-evaluation) |
 | [Multimodal Input/Output](#multimodal-inputoutput) |
 | [Orchestrator and Workers](#orchestrator-and-workers) |
 | [Parallel Processing](#parallel-processing) |
@@ -35,6 +36,7 @@ The most fundamental rule for using LLMs effectively is to *make their scope as 
 | [Structured Outputs](#structured-outputs) |
 | [Tool Use (function-calling)](#tool-use-function-calling) |
 | [Other Useful Resources](#other-useful-resources) |
+
 
 ## Autonomous Agent
 
@@ -78,6 +80,7 @@ I haven't explored this area much, but here are some python libraries which I am
 
 - https://github.com/browser-use/browser-use (LLM can navigate freely in your local web browser)
 
+
 ## Evaluator Optimiser (Reflection)
 
 TODO
@@ -119,6 +122,10 @@ Another approach which I've found to be highly effective is to design the user/L
 A MCP server allows the agent in your IDE (e.g. cursor or roo code) or any other MCP-compatible client to use your custom-defined python functions.
 
 There is a working example in [./model_context_protocol/custom_mcp_server/](/model_context_protocol/custom_mcp_server) - start with [./model_context_protocol/custom_mcp_server/README.md](./model_context_protocol/custom_mcp_server/README.md).
+
+## Model Evaluation
+
+Lightweight LLM evals can live alongside standard software tests. For an example, refer to [evals/using_pytest/README.md](./evals/using_pytest/README.md)
 
 ## MultiModal Input/Output
 
