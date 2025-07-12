@@ -49,7 +49,7 @@ def setup_page():
 
     if "llm_params_saved" not in st.session_state:
         st.session_state.llm_params_saved = False
-        st.session_state.selected_llm_names = []
+        st.session_state.selected_llm_names = None
         st.session_state.llm_temperature = 1.0
 
     with st.form(key="llm_api_setup_form"):
@@ -79,7 +79,7 @@ def setup_page():
             st.session_state.llm_api_key = llm_api_key
             st.session_state.available_llm_names = llm_names
             st.session_state.llm_params_saved = False  # new model API
-            st.session_state.selected_llm_names = []  # new model API
+            st.session_state.selected_llm_names = None  # new model API
             st.session_state.llm_temperature = 1.0  # new model API
             st.session_state.llm_client = openai.OpenAI(
                 base_url=st.session_state.llm_api_base_url,
@@ -91,7 +91,7 @@ def setup_page():
         return
 
     with st.form(key="model_setup_form"):
-        llm_name = st.multiselect(
+        selected_llms = st.multiselect(
             "Model Name",
             st.session_state.available_llm_names,
             default=(
@@ -108,61 +108,47 @@ def setup_page():
         llm_params_submit_button = st.form_submit_button(
             label="Submit New Model Parameters"
         )
-    #     if llm_params_submit_button:
-    #         if not llm_name:
-    #             st.error("Please select a model name")
-    #         elif not (0.0 <= llm_temperature <= 2.0):
-    #             st.error("Temperature must be in the range [0, 2]")
-    #         else:
-    #             st.session_state.llm_name = llm_name
-    #             st.session_state.llm_temperature = llm_temperature
-    #             st.session_state.llm_params_saved = True
-    #             st.success("Model parameters saved successfully")
-    #
-    # if not st.session_state.llm_params_saved:
-    #     return
-    #
-    # with st.form(key="memory_alg_setup_form"):
-    #     memory_alg_name = st.selectbox(
-    #         "Memory Algorithm",
-    #         memory_algs,
-    #         index=(
-    #             list(memory_algs).index(st.session_state.memory_alg_name)
-    #             if st.session_state.memory_alg_name
-    #             else None
-    #         ),
-    #     )
-    #     submit_memory_alg_select = st.form_submit_button(
-    #         label="Confirm Selected Memory Algorithm"
-    #     )
-    #     if submit_memory_alg_select:
-    #         if memory_alg_name is None:
-    #             st.error("Please select a memory algorithm")
-    #         else:
-    #             st.session_state.memory_alg_is_selected = True
-    #             st.session_state.memory_alg_name = memory_alg_name
-    #             st.session_state.memory_alg = memory_algs[memory_alg_name](
-    #                 llm_client=st.session_state.llm_client,
-    #                 llm_name=st.session_state.llm_name,
-    #                 llm_temperature=st.session_state.llm_temperature,
-    #                 system_prompt=None,
-    #             )
-    #             st.success(
-    #                 f"Selected memory algorithm [{st.session_state.memory_alg_name}]"
-    #             )
+        if llm_params_submit_button:
+            if not selected_llms:
+                st.error("Please select at least one model")
+            elif not (0.0 <= llm_temperature <= 2.0):
+                st.error("Temperature must be in the range [0, 2]")
+            else:
+                st.session_state.selected_llm_names = selected_llms
+                st.session_state.llm_temperature = llm_temperature
+                st.session_state.llm_params_saved = True
+                st.success("Model setup completed")
 
 
 def question_answering_page():
     st.title("Question-Answering")
+    if not st.session_state.llm_params_saved:
+        st.error("Please complete model setup")
+        return
+    uploaded_file = st.file_uploader(label="Upload a PDF", type=["pdf"])
     stop_condition = st.radio(
         label="Stopping condition: ",
         options=[
             "Any model finds answer on page",
             "All models find answer on page",
-            "Always process whole PDF",
+            "Process whole PDF",
         ],
         horizontal=True,
     )
+    user_query = st.text_input(label="Enter your question(s)")
+    start_button = st.button(label="Start")
+
+    if not start_button:
+        return
+
+    if not uploaded_file:
+        st.error("Please upload a PDF")
+        return
+    if not user_query:
+        st.error("Please provide at least 1 question")
+        return
+
+    st.success("starting")
 
 
 def main():
