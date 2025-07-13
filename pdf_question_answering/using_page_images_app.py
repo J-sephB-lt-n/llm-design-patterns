@@ -4,13 +4,21 @@ Streamlit app entrypoint
 App for PDF question-answering using LLMs (using PDF page images)
 """
 
+import base64
+import time
 from collections.abc import Callable
 from typing import Final
 
 import httpx
+from pydantic import BaseModel, Field
+import pymupdf
 import openai
 import streamlit as st
 from loguru import logger
+
+from structured_outputs.pydantic_schema_dump_retry import (
+    structured_output_chat_completion,
+)
 
 
 def landing_page():
@@ -120,6 +128,17 @@ def setup_page():
                 st.success("Model setup completed")
 
 
+class LlmPageResponse(BaseModel):
+    answer_is_on_this_page: bool = Field(
+        ...,
+        description="`true` if answer to user's query appears on this page.",
+    )
+    answer: str | None = Field(
+        description="The answer to the user's question (if it appears on this page), else null.",
+        default=None,
+    )
+
+
 def question_answering_page():
     st.title("Question-Answering")
     if not st.session_state.llm_params_saved:
@@ -148,7 +167,74 @@ def question_answering_page():
         st.error("Please provide at least 1 question")
         return
 
-    st.success("starting")
+    progress_bar = st.progress(0.0)
+    progress_text = st.empty()
+    with pymupdf.open(stream=uploaded_file, filetype="pdf") as doc:
+        for page_num, page in enumerate(doc, start=1):
+            progress_bar.progress(page_num / doc.page_count)
+            progress_text.text(f"Processing page {page_num}/{doc.page_count}")
+            page_text: str = page.get_text(sort=True)
+            page_pixmap: pymupdf.Pixmap = page.get_pixmap(
+                dpi=72, colorspace=pymupdf.csRGB
+            )
+            page_image_bytes: bytes = page_pixmap.tobytes("png")
+            page_image_b64: bytes = base64.b64encode(page_image_bytes)
+            page_image_b64_str: str = page_image_b64.decode("ascii")
+            answer_is_on_this_page_count: int = 0
+            for llm_name in st.session_state.selected_llm_names:
+                with st.spinner(f"Running [{llm_name}]"):
+                    llm_response = structured_output_chat_completion(
+                        response_model=LlmPageResponse,
+                        max_n_retries=2,
+                        llm_client=st.session_state.llm_client,
+                        chat_kwargs={
+                            "model": llm_name,
+                            "temperature": st.session_state.llm_temperature,
+                        },
+                        logger=logger,
+                        messages=[
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": f"data:image/png;base64,{page_image_b64_str}"
+                                        },
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": f"""
+<user-query>
+{user_query}
+</user-query>
+
+<page-text>
+{page_text}
+</page-text>
+
+You have been provided with a page image (and the roughly extracted page text) of a page from a PDF.
+Your task is to identify if the answer to the user's query can be found on this page, \
+and to return the answer if it does.
+                                            """.strip(),
+                                    },
+                                ],
+                            },
+                        ],
+                    )
+                if llm_response.answer_is_on_this_page:
+                    st.success(f"[{llm_name}] {llm_response.answer}")
+                    answer_is_on_this_page_count += 1
+            if (
+                stop_condition == "Any model finds answer on page"
+                and answer_is_on_this_page_count > 0
+            ):
+                return
+            elif (
+                stop_condition == "All models find answer on page"
+                and answer_is_on_this_page_count == len(st.selected_llm_names)
+            ):
+                return
 
 
 def main():
