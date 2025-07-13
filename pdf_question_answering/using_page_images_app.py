@@ -58,7 +58,7 @@ def setup_page():
     if "llm_params_saved" not in st.session_state:
         st.session_state.llm_params_saved = False
         st.session_state.selected_llm_names = None
-        st.session_state.llm_temperature = 1.0
+        st.session_state.llm_temperature = 0.0
 
     with st.form(key="llm_api_setup_form"):
         llm_api_base_url = st.text_input(
@@ -223,7 +223,7 @@ and to return the answer if it does.
                         ],
                     )
                 if llm_response.answer_is_on_this_page:
-                    st.success(f"[{llm_name}] {llm_response.answer}")
+                    st.success(f"[{llm_name}] [page {page_num}] {llm_response.answer}")
                     answer_is_on_this_page_count += 1
             if (
                 stop_condition == "Any model finds answer on page"
