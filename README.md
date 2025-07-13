@@ -30,6 +30,7 @@ The most fundamental rule for using LLMs effectively is to *make their scope as 
 | [Multimodal Input/Output](#multimodal-inputoutput) |
 | [Orchestrator and Workers](#orchestrator-and-workers) |
 | [Parallel Processing](#parallel-processing) |
+| [PDF Question-Answering](#pdf-question-answering) |
 | [Prompt Chaining](#prompt-chaining) |
 | [Retrieval-Augmented Generation (RAG)](#retrieval-augmented-generation-rag) |
 | [Routing](#routing) |
@@ -144,6 +145,14 @@ There are a few different ways to run code in parallel/concurrently. Examples ar
 
 ```bash
 uv run python -m parallel_processing.async
+```
+
+## PDF Question-Answering
+
+Using page images (e.g. good for asking questions about tables):
+
+```bash
+PYTHONPATH=. uv run streamlit run pdf_question_answering/using_page_images_app.py
 ```
 
 ## Prompt Chaining
