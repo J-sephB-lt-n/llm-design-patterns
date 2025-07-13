@@ -33,7 +33,7 @@ if __name__ == "__main__":
                 "content": [
                     {
                         "type": "text",
-                        "content": "Describe the contents of this image.",
+                        "text": "Describe the contents of this image.",
                     },
                     {
                         "type": "image_url",
