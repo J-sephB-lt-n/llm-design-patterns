@@ -104,7 +104,7 @@ def structured_output_chat_completion(
             if not find_json:
                 raise ValueError("No JSON markdown code block found.")
 
-            return RequiredResponseSchema.model_validate_json(
+            return response_model.model_validate_json(
                 find_json.group("json_content").strip(),
             )
 
