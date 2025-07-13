@@ -33,7 +33,9 @@ def inject_structured_output_prompt_instructions(
     Appends structured output instructions instructions to the last message in `messages`
     (instructions on required output format)
     """
-    SCHEMA_REQUIREMENT_INSTRUCTION: Final[str] = f"""
+    SCHEMA_REQUIREMENT_INSTRUCTION: Final[
+        str
+    ] = f"""
 Your response must include a single JSON markdown code block (containing valid JSON) whose \
 contents adheres to the following constraints:
 <non-negotiable-response-json-constraints>
@@ -51,9 +53,10 @@ and doing so must not raise a pydantic.ValidationError.
         case str():  # text-only input
             msg_to_augment["content"] += "\n" + SCHEMA_REQUIREMENT_INSTRUCTION
         case list():  # multimodal input
-            for msg in msg_to_augment:
+            for msg in msg_to_augment["content"]:
                 if msg["type"] == "text":
                     msg["text"] += "\n" + SCHEMA_REQUIREMENT_INSTRUCTION
+                    return
             raise ValueError(
                 "Could not find text content in last chat completion message"
             )
@@ -84,12 +87,7 @@ def structured_output_chat_completion(
         response_model=response_model,
         messages=messages_history,
     )
-    logger.debug(
-        "\n"
-        + "\n".join(
-            (f"--{k}--\n" + v for msg in messages_history for k, v in msg.items())
-        )
-    )
+    logger.debug("\n" + json.dumps(messages_history, indent=4))
 
     llm_response = llm_client.chat.completions.create(
         messages=messages_history,
