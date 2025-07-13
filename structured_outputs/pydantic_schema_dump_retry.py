@@ -1,10 +1,11 @@
 """
 Example of enforcing output to adhere to a given JSON schema, in the style \
-of instructor
+of https://github.com/567-labs/instructor 
 """
 
 import copy
 import json
+import logging
 import os
 import re
 from typing import Final
@@ -12,6 +13,7 @@ from typing import Final
 import dotenv
 import openai
 import pydantic
+from loguru import logger
 from pydantic import BaseModel, Field
 
 
@@ -25,65 +27,68 @@ class StructuredOutputError(Exception):
 
 def inject_structured_output_prompt_instructions(
     messages: list[dict],
-    data_model: BaseModel,
-) -> list[dict]:
+    response_model: BaseModel,
+) -> None:
     """
     Appends structured output instructions instructions to the last message in `messages`
     (instructions on required output format)
     """
-    SCHEMA_REQUIREMENT_INSTRUCTION: Final[
-        str
-    ] = f"""
+    SCHEMA_REQUIREMENT_INSTRUCTION: Final[str] = f"""
 Your response must include a single JSON markdown code block (containing valid JSON) whose \
 contents adheres to the following constraints:
 <non-negotiable-response-json-constraints>
 ```json
-{json.dumps(data_model.model_json_schema(), indent=4)}
+{json.dumps(response_model.model_json_schema(), indent=4)}
 ```
 </non-negotiable-response-json-constraints>
 
 The contents of your JSON response will be parsed using python pydantic with the command \
-`{data_model.__name__}.model_validate_json()`, \
+`{response_model.__name__}.model_validate_json()`, \
 and doing so must not raise a pydantic.ValidationError.
         """
     msg_to_augment = messages[-1]
     match msg_to_augment["content"]:
         case str():  # text-only input
-            ...
+            msg_to_augment["content"] += "\n" + SCHEMA_REQUIREMENT_INSTRUCTION
         case list():  # multimodal input
-            ...
+            for msg in msg_to_augment:
+                if msg["type"] == "text":
+                    msg["text"] += "\n" + SCHEMA_REQUIREMENT_INSTRUCTION
+            raise ValueError(
+                "Could not find text content in last chat completion message"
+            )
         case _:
             raise ValueError(
                 'unexpected type: type(messages[-1]["content"]) is '
-                + f'{type(messages[-1]["content"])}'
+                + f"{type(messages[-1]['content'])}"
             )
-
-    # return messages[:-1] + [
-    #     {
-    #         "role": messages[-1]["role"],
-    #         "content": messages[-1]["content"] + "\n" + SCHEMA_REQUIREMENT_INSTRUCTION,
-    #     }
-    # ]
 
 
 def structured_output_chat_completion(
-    data_model: pydantic.BaseModel,
+    response_model: pydantic.BaseModel,
     max_n_retries: int,
     messages: list[dict],
     llm_client: openai.OpenAI,
     chat_kwargs: dict,
+    logger: logging.Logger,
 ) -> pydantic.BaseModel:
     """
-    Generate a chat completion returning valid JSON with schema adhering to `data_model`
+    Generate a chat completion returning valid JSON with schema adhering to `response_model`
 
     Raises:
         StructuredOutputError
     """
 
     messages_history: list[dict] = copy.deepcopy(messages)
-    messages_history = inject_structured_output_prompt_instructions(
-        data_model=data_model,
-        messages=messages,
+    inject_structured_output_prompt_instructions(
+        response_model=response_model,
+        messages=messages_history,
+    )
+    logger.debug(
+        "\n"
+        + "\n".join(
+            (f"--{k}--\n" + v for msg in messages_history for k, v in msg.items())
+        )
     )
 
     llm_response = llm_client.chat.completions.create(
@@ -91,7 +96,7 @@ def structured_output_chat_completion(
         **chat_kwargs,
     )
 
-    for attempt_num in range(1, max_n_retries + 2):
+    for _ in range(1, max_n_retries + 2):
         try:
             find_json = re.search(
                 r"```json\s*(?P<json_content>.*?)```",
@@ -158,7 +163,7 @@ if __name__ == "__main__":
     )
 
     structured_llm_response = structured_output_chat_completion(
-        data_model=RequiredResponseSchema,
+        response_model=RequiredResponseSchema,
         max_n_retries=2,
         llm_client=llm_client,
         chat_kwargs={
@@ -175,6 +180,7 @@ if __name__ == "__main__":
                 "content": user_query,
             },
         ],
+        logger=logger,
     )
 
     print(
