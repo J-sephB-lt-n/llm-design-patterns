@@ -2,7 +2,10 @@
 Memory algorithm which simply stores the entire chat history
 """
 
+import json
+
 import openai
+from loguru import logger
 
 from app.interfaces.memory_alg_protocol import ChatMessage, ChatMessageDetail, MemoryAlg
 
@@ -39,6 +42,10 @@ class StoreFullChatHistory(MemoryAlg):
                 )
             )
 
+        logger.debug(
+            "\n" + json.dumps([x.model_dump() for x in self.chat_history], indent=4)
+        )
+
     def chat(self, user_msg: str) -> None:
         """
         Process a new user message, update memory and chat history
@@ -65,9 +72,13 @@ class StoreFullChatHistory(MemoryAlg):
         self.chat_history.append(
             ChatMessageDetail(
                 visible_messages=[user_msg, llm_reply],
-                all_messages=[ChatMessage(**msg) for msg in chat_msgs_to_llm],
+                all_messages=[ChatMessage(**msg) for msg in chat_msgs_to_llm]
+                + [llm_reply],
                 token_usage=llm_api_response.usage.model_dump(),
             )
+        )
+        logger.debug(
+            "\n" + json.dumps([x.model_dump() for x in self.chat_history], indent=4)
         )
 
     def view_memory_as_json(self) -> dict:

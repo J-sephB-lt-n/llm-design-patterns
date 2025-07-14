@@ -105,7 +105,7 @@ def setup_page():
             st.session_state.llm_name = ""  # new model API
             st.session_state.llm_temperature = 1.0  # new model API
             st.session_state.llm_client = openai.OpenAI(
-                base_url=st.session_state.llm_api_base_url,
+                base_url=f"{st.session_state.llm_api_base_url}/v1",
                 api_key=st.session_state.llm_api_key,
             )
             st.success(f"Model API is Valid (found {len(llm_names)} models)")
