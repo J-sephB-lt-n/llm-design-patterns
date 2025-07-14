@@ -93,7 +93,7 @@ def test_evaluate_llm_arithmetical_accuracy(
             test_logger.info("answer is CORRECT")
             answer_correct_count.append(True)
         else:
-            test_logger.info(f'answer is WRONG. Expected {example["correct_answer"]}')
+            test_logger.info(f"answer is WRONG. Expected {example['correct_answer']}")
             answer_correct_count.append(False)
         test_logger.info("------ end of example ------")
 
@@ -102,9 +102,9 @@ def test_evaluate_llm_arithmetical_accuracy(
     test_logger.info(f"LLM ACCURACY METRIC: {accuracy_metric}")
 
     REQUIRED_ACCURACY: Final[float] = 0.8
-    assert (
-        accuracy_metric >= REQUIRED_ACCURACY
-    ), f"Required LLM accuracy on multiplication is {REQUIRED_ACCURACY} - observed accuracy={accuracy_metric}"
+    assert accuracy_metric >= REQUIRED_ACCURACY, (
+        f"Required LLM accuracy on multiplication is {REQUIRED_ACCURACY} - observed accuracy={accuracy_metric}"
+    )
 
 
 # ... can add more tests here by defining more test_*() functions

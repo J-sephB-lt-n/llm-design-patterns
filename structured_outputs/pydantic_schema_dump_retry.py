@@ -33,9 +33,7 @@ def inject_structured_output_prompt_instructions(
     Appends structured output instructions instructions to the last message in `messages`
     (instructions on required output format)
     """
-    SCHEMA_REQUIREMENT_INSTRUCTION: Final[
-        str
-    ] = f"""
+    SCHEMA_REQUIREMENT_INSTRUCTION: Final[str] = f"""
 Your response must include a single JSON markdown code block (containing valid JSON) whose \
 contents adheres to the following constraints:
 <non-negotiable-response-json-constraints>

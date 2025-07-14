@@ -1310,8 +1310,8 @@ dependencies = [
     { name = "httpx" },
     { name = "loguru" },
     { name = "openai" },
+    { name = "pydantic" },
     { name = "pymupdf" },
-    { name = "python-dotenv" },
     { name = "streamlit" },
 ]
 
@@ -1320,8 +1320,8 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "openai", specifier = ">=1.93.3" },
+    { name = "pydantic", specifier = ">=2.11.5" },
     { name = "pymupdf", specifier = ">=1.26.3" },
-    { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "streamlit", specifier = ">=1.32.0" },
 ]
 
@@ -2126,6 +2126,12 @@ wheels = [
 name = "structured-output"
 version = "0.1.0"
 source = { virtual = "structured_outputs" }
+dependencies = [
+    { name = "loguru" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "loguru", specifier = ">=0.7.3" }]
 
 [[package]]
 name = "sympy"
