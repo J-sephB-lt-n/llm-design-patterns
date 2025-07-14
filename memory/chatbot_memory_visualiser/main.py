@@ -2,6 +2,7 @@
 Entrypoint of the streamlit app
 """
 
+import inspect
 from collections.abc import Callable
 from typing import Final
 
@@ -10,7 +11,7 @@ import openai
 import streamlit as st
 from loguru import logger
 
-from app.interfaces.memory_alg_protocol import ChatMessageDetail
+from app.interfaces.memory_alg_protocol import ChatMessageDetail, MemoryAlg
 from app.memory_algs import memory_algs
 
 
@@ -54,6 +55,27 @@ def display_chat_history(chat_history: list[ChatMessageDetail]) -> None:
             with st.chat_message(msg.role):
                 st.markdown(msg.content)
     st.divider()
+
+
+def init_args_to_streamlit_controls(memory_alg: type[MemoryAlg]) -> dict:
+    """
+    Parse the keyword arguments out of the __init__() method of a memory algorithm class \
+    and create streamlit widgets for the user to specify them
+    """
+    alg_kwargs: dict[str, Callable] = {}
+    class_signature = inspect.signature(memory_alg.__init__)
+    for param in class_signature.parameters.values():
+        if param.name in ("self", "llm_client", "llm_name", "llm_temperature"):
+            continue
+        match param.annotation:
+            case t if t is str:
+                alg_kwargs[param.name] = st.text_input(param.name)
+            case _:
+                raise ValueError(
+                    f"Cannot create streamlit widget for type {param.annotation} of __init__() arg {param.name}"
+                )
+
+    return alg_kwargs
 
 
 def setup_page():

@@ -20,27 +20,26 @@ class StoreFullChatHistory(MemoryAlg):
         llm_client: openai.OpenAI,
         llm_name: str,
         llm_temperature: float,
-        system_prompt: str | None = None,
+        system_prompt: str,
     ) -> None:
         self.chat_history: list[ChatMessageDetail] = []
         self.llm_client = llm_client
         self.llm_name: str = llm_name
         self.llm_temperature = llm_temperature
-        self.system_prompt: str | None = system_prompt
+        self.system_prompt: str = system_prompt
 
-        if self.system_prompt:
-            self.chat_history.append(
-                ChatMessageDetail(
-                    visible_messages=[],
-                    all_messages=[
-                        ChatMessage(
-                            role="system",
-                            content=system_prompt,
-                        )
-                    ],
-                    token_usage={},
-                )
+        self.chat_history.append(
+            ChatMessageDetail(
+                visible_messages=[],
+                all_messages=[
+                    ChatMessage(
+                        role="system",
+                        content=system_prompt,
+                    )
+                ],
+                token_usage={},
             )
+        )
 
         logger.debug(
             "\n" + json.dumps([x.model_dump() for x in self.chat_history], indent=4)
