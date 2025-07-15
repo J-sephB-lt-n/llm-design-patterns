@@ -2,6 +2,7 @@
 Entrypoint of the streamlit app
 """
 
+import functools
 import inspect
 from collections.abc import Callable
 from typing import Final
@@ -69,7 +70,7 @@ def init_args_to_streamlit_controls(memory_alg: type[MemoryAlg]) -> dict:
             continue
         match param.annotation:
             case t if t is str:
-                alg_kwargs[param.name] = st.text_input(param.name)
+                alg_kwargs[param.name] = functools.partial(st.text_input, param.name)
             case _:
                 raise ValueError(
                     f"Cannot create streamlit widget for type {param.annotation} of __init__() arg {param.name}"
@@ -95,6 +96,10 @@ def setup_page():
     if "memory_alg_is_selected" not in st.session_state:
         st.session_state.memory_alg_is_selected = False
         st.session_state.memory_alg_name = ""
+        st.session_state.memory_alg_kwargs = None
+
+    if "memory_alg_setup_is_completed" not in st.session_state:
+        st.session_state.memory_alg_setup_is_completed = False
         st.session_state.memory_alg = None
 
     with st.form(key="llm_api_setup_form"):
@@ -167,7 +172,7 @@ def setup_page():
     if not st.session_state.llm_params_saved:
         return
 
-    with st.form(key="memory_alg_setup_form"):
+    with st.form(key="memory_alg_select_form"):
         memory_alg_name = st.selectbox(
             "Memory Algorithm",
             memory_algs,
@@ -178,7 +183,7 @@ def setup_page():
             ),
         )
         submit_memory_alg_select = st.form_submit_button(
-            label="Confirm Selected Memory Algorithm"
+            label="Submit Selected Memory Algorithm"
         )
         if submit_memory_alg_select:
             if memory_alg_name is None:
@@ -186,22 +191,55 @@ def setup_page():
             else:
                 st.session_state.memory_alg_is_selected = True
                 st.session_state.memory_alg_name = memory_alg_name
-                st.session_state.memory_alg = memory_algs[memory_alg_name](
-                    llm_client=st.session_state.llm_client,
-                    llm_name=st.session_state.llm_name,
-                    llm_temperature=st.session_state.llm_temperature,
-                    system_prompt=None,
-                )
                 st.success(
                     f"Selected memory algorithm [{st.session_state.memory_alg_name}]"
                 )
+    if not st.session_state.memory_alg_is_selected:
+        return
+
+    with st.form(key="memory_alg_setup_form"):
+        alg_setup_controls = init_args_to_streamlit_controls(
+            memory_algs[st.session_state.memory_alg_name]
+        )
+        logger.error(alg_setup_controls)
+        alg_setup = {}
+        if st.session_state.memory_alg_kwargs:
+            st.text("Current args:")
+            st.json(st.session_state.memory_alg_kwargs)
+        for param, input_control in alg_setup_controls.items():
+            alg_setup[param] = input_control()
+        logger.error(alg_setup)
+        submit_memory_alg_params = st.form_submit_button(
+            label="Submit Memory Alg Parameters",
+        )
+        if submit_memory_alg_params:
+            for arg_name, arg_value in alg_setup.items():
+                if not arg_value:
+                    st.error(f"Please provide value for parameter '{arg_name}'")
+                    return
+            st.session_state.memory_alg_setup_is_completed = True
+            st.session_state.memory_alg_kwargs = alg_setup
+            st.session_state.memory_alg = memory_algs[memory_alg_name](
+                llm_client=st.session_state.llm_client,
+                llm_name=st.session_state.llm_name,
+                llm_temperature=st.session_state.llm_temperature,
+                **alg_setup,
+            )
+            st.success(
+                f"Completed setup of memory algorithm [{st.session_state.memory_alg_name}]"
+            )
 
 
 def chat_page():
     st.title("Chat")
     if not all(
         st.session_state.get(x)
-        for x in ("llm_api_is_valid", "llm_params_saved", "memory_alg_is_selected")
+        for x in (
+            "llm_api_is_valid",
+            "llm_params_saved",
+            "memory_alg_is_selected",
+            "memory_alg_setup_is_completed",
+        )
     ):
         st.error("Please complete setup")
         return
