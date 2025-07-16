@@ -37,6 +37,7 @@ class MemoryAlg(Protocol):
 
     llm_client: openai.OpenAI
     chat_history: list[ChatMessageDetail]
+    alg_description: str
 
     def chat(self, user_msg: str) -> None:
         """
