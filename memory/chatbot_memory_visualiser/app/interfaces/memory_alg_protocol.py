@@ -2,7 +2,7 @@
 Required interface which all memory algorithms must follow to integrate with this app
 """
 
-from typing import Literal, Protocol
+from typing import ClassVar, Literal, Protocol
 
 import openai
 from pydantic import BaseModel
@@ -35,9 +35,10 @@ class MemoryAlg(Protocol):
     Required behaviour of a chat-based memory algorithm
     """
 
+    alg_description: ClassVar[str]
+
     llm_client: openai.OpenAI
     chat_history: list[ChatMessageDetail]
-    alg_description: str
 
     def chat(self, user_msg: str) -> None:
         """

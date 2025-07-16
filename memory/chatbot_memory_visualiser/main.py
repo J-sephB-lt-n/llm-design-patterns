@@ -18,6 +18,14 @@ from app.memory_algs import memory_algs
 
 def landing_page():
     st.title("Landing Page")
+    selected_memory_alg_name: str = st.selectbox(
+        label="Select a memory algorithm to see a summary:",
+        options=memory_algs.keys(),
+    )
+    st.markdown(
+        "**Algorithm summary:**\n\n"
+        + memory_algs[selected_memory_alg_name].alg_description
+    )
 
 
 def fetch_llm_names(base_url: str, api_key: str) -> list[str] | None:

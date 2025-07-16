@@ -14,6 +14,12 @@ class NoMemory(MemoryAlg):
     Memory algorithm with no memory (baseline)
     """
 
+    alg_description = dedent(
+        """
+        No memory whatsoever.
+        """
+    ).strip()
+
     def __init__(
         self,
         llm_client: openai.OpenAI,
@@ -26,11 +32,6 @@ class NoMemory(MemoryAlg):
         self.llm_name: str = llm_name
         self.llm_temperature = llm_temperature
         self.system_prompt: str = system_prompt
-        self.alg_description = dedent(
-            """
-            A chat bot with no memory whatsoever (used as a baseline).
-        """
-        ).strip()
 
     def chat(self, user_msg: str) -> None:
         """

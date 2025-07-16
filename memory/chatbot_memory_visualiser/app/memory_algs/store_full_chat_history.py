@@ -3,6 +3,7 @@ Memory algorithm which simply stores the entire chat history
 """
 
 import json
+from textwrap import dedent
 
 import openai
 from loguru import logger
@@ -14,6 +15,12 @@ class StoreFullChatHistory(MemoryAlg):
     """
     Memory algorithm which just stores the entire chat history
     """
+
+    alg_description = dedent(
+        """
+        Keeps a full history of the entire conversation so far.
+        """
+    )
 
     def __init__(
         self,
