@@ -90,7 +90,7 @@ def init_args_to_streamlit_controls(memory_alg: type[MemoryAlg]) -> dict:
                 alg_kwargs[param.name] = functools.partial(
                     st.selectbox,
                     param.name,
-                    choices=choices,
+                    options=choices,
                     index=choices.index(param.default),
                 )
             case _:
@@ -236,7 +236,7 @@ def setup_page():
         )
         if submit_memory_alg_params:
             for arg_name, arg_value in alg_setup.items():
-                if not arg_value:
+                if arg_value is None:
                     st.error(f"Please provide value for parameter '{arg_name}'")
                     return
             st.session_state.memory_alg_setup_is_completed = True
