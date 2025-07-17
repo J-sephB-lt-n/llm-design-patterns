@@ -5,7 +5,7 @@ Entrypoint of the streamlit app
 import functools
 import inspect
 from collections.abc import Callable
-from typing import Final
+from typing import Final, get_args, get_origin, Literal
 
 import httpx
 import openai
@@ -84,6 +84,14 @@ def init_args_to_streamlit_controls(memory_alg: type[MemoryAlg]) -> dict:
             case t if t is str:
                 alg_kwargs[param.name] = functools.partial(
                     st.text_input, param.name, value=param.default
+                )
+            case t if get_origin(t) is Literal:
+                choices = list(get_args(t))
+                alg_kwargs[param.name] = functools.partial(
+                    st.selectbox,
+                    param.name,
+                    choices=choices,
+                    index=choices.index(param.default),
                 )
             case _:
                 raise ValueError(
