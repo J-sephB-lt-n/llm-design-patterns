@@ -87,8 +87,8 @@ class StoreFullChatHistory(MemoryAlg):
             "\n" + json.dumps([x.model_dump() for x in self.chat_history], indent=4)
         )
 
-    def view_memory_as_json(self) -> dict:
+    def view_memory_as_json(self) -> list[dict]:
         """
         Render latest state of the agent's memory as a dict
         """
-        return self.chat_history[-1].model_dump()
+        return [msg.model_dump() for msg in self.chat_history[-1].all_messages]

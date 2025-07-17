@@ -280,11 +280,30 @@ def main():
         "Landing": landing_page,
         "Setup": setup_page,
         "Chat": chat_page,
+        "Memory": memory_page,
     }
 
     st.sidebar.title("Agent Memory Visualiser")
     selection = st.sidebar.radio("Go to", list(PAGES.keys()))
     PAGES[selection]()
+
+
+def memory_page():
+    st.title("Memory")
+    if not all(
+        st.session_state.get(x)
+        for x in (
+            "llm_api_is_valid",
+            "llm_params_saved",
+            "memory_alg_is_selected",
+            "memory_alg_setup_is_completed",
+        )
+    ):
+        st.error("Please complete setup")
+        return
+    st.markdown(f"The current algorithm is [{st.session_state.memory_alg_name}]")
+    st.markdown("The current state of the algorithm's memory is:")
+    st.json(st.session_state.memory_alg.view_memory_as_json())
 
 
 if __name__ == "__main__":

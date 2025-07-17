@@ -218,5 +218,7 @@ class RecursiveSummarisation(MemoryAlg):
         """
         return {
             "long_term_summary": self.chat_summary,
-            "short_term_chat_history": self.session_memory,
+            "short_term_chat_history": [
+                msg.model_dump() for msg in self.session_memory
+            ],
         }
