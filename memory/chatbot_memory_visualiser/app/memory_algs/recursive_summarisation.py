@@ -92,6 +92,7 @@ class RecursiveSummarisation(MemoryAlg):
         summary_max_n_sentences: int = 20,
         summarise_every_n_user_messages: int = 10,
         min_n_messages_in_session_memory: int = 5,
+        session_memory_render_style: Literal["json_dumps", "plain_text"] = "plain_text",
     ):
         self.chat_history: list[ChatMessageDetail] = []
         self.llm_client = llm_client
@@ -100,6 +101,7 @@ class RecursiveSummarisation(MemoryAlg):
         self.summary_max_n_sentences = summary_max_n_sentences
         self.summarise_every_n_user_messages = summarise_every_n_user_messages
         self.min_n_messages_in_session_memory = min_n_messages_in_session_memory
+        self.session_memory_render_style = session_memory_render_style
         self.session_memory: list[ChatMessage] = []
         self.chat_summary: str = ""
         self.user_message_counter: int = 0
@@ -140,7 +142,7 @@ class RecursiveSummarisation(MemoryAlg):
                 previous_memory=self.chat_summary,
                 current_context=self.chat_messages_to_text(
                     self.session_memory,
-                    output_style="plain_text",
+                    output_style=self.session_memory_render_style,
                 ),
             ),
         )
@@ -172,12 +174,15 @@ class RecursiveSummarisation(MemoryAlg):
                 content=MEMORY_ITERATION_PROMPT.format(
                     summary_max_n_sentences=self.summary_max_n_sentences,
                     previous_memory=self.chat_summary,
-                    session_context=(
-                        self.session_memory
-                        if self.min_n_messages_in_session_memory == 0
-                        else self.session_memory[
-                            : -self.min_n_messages_in_session_memory
-                        ]
+                    session_context=self.chat_messages_to_text(
+                        (
+                            self.session_memory
+                            if self.min_n_messages_in_session_memory == 0
+                            else self.session_memory[
+                                : -self.min_n_messages_in_session_memory
+                            ]
+                        ),
+                        output_style=self.session_memory_render_style,
                     ),
                 ),
             )
