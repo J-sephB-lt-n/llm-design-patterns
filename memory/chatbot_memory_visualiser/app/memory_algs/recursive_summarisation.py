@@ -27,7 +27,7 @@ MEMORY_ITERATION_PROMPT: Final[str] = dedent(
     3. Combine the old and new personality information to create an updated representation of the user and \
         bot's traits.
     4. Structure the updated memory in a clear and concise manner, ensuring it does not \
-    exceed {{ n_sentences }} sentences.
+    exceed {summary_max_n_sentences} sentences.
     Remember, the memory should serve as a reference point to maintain continuity in the dialogue \
     and help you respond accurately to the user based on their personality.
 
@@ -89,7 +89,7 @@ class RecursiveSummarisation(MemoryAlg):
         llm_client: openai.OpenAI,
         llm_name: str,
         llm_temperature: float,
-        summary_len_n_sentences: int,
+        summary_max_n_sentences: int,
         summarise_every_n_user_messages: int,
         min_n_messages_in_session_memory: int,
     ):
@@ -97,7 +97,7 @@ class RecursiveSummarisation(MemoryAlg):
         self.llm_client = llm_client
         self.llm_name = llm_name
         self.llm_temperature = llm_temperature
-        self.summary_len_n_sentences = summary_len_n_sentences
+        self.summary_max_n_sentences = summary_max_n_sentences
         self.summarise_every_n_user_messages = summarise_every_n_user_messages
         self.min_n_messages_in_session_memory = min_n_messages_in_session_memory
         self.session_memory: list[ChatMessage] = []
@@ -170,6 +170,7 @@ class RecursiveSummarisation(MemoryAlg):
             internal_summarisation_prompt = ChatMessage(
                 role="user",
                 content=MEMORY_ITERATION_PROMPT.format(
+                    summary_max_n_sentences=self.summary_max_n_sentences,
                     previous_memory=self.chat_summary,
                     current_context=(
                         self.session_memory
