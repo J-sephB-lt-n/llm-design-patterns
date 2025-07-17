@@ -89,9 +89,9 @@ class RecursiveSummarisation(MemoryAlg):
         llm_client: openai.OpenAI,
         llm_name: str,
         llm_temperature: float,
-        summary_max_n_sentences: int,
-        summarise_every_n_user_messages: int,
-        min_n_messages_in_session_memory: int,
+        summary_max_n_sentences: int = 20,
+        summarise_every_n_user_messages: int = 10,
+        min_n_messages_in_session_memory: int = 5,
     ):
         self.chat_history: list[ChatMessageDetail] = []
         self.llm_client = llm_client

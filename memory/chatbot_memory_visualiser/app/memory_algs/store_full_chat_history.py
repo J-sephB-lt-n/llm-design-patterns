@@ -27,7 +27,7 @@ class StoreFullChatHistory(MemoryAlg):
         llm_client: openai.OpenAI,
         llm_name: str,
         llm_temperature: float,
-        system_prompt: str,
+        system_prompt: str = "You are a helpful assistant",
     ) -> None:
         self.chat_history: list[ChatMessageDetail] = []
         self.llm_client = llm_client

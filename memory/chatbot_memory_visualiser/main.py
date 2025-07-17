@@ -77,8 +77,14 @@ def init_args_to_streamlit_controls(memory_alg: type[MemoryAlg]) -> dict:
         if param.name in ("self", "llm_client", "llm_name", "llm_temperature"):
             continue
         match param.annotation:
+            case t if t is int:
+                alg_kwargs[param.name] = functools.partial(
+                    st.number_input, param.name, value=param.default
+                )
             case t if t is str:
-                alg_kwargs[param.name] = functools.partial(st.text_input, param.name)
+                alg_kwargs[param.name] = functools.partial(
+                    st.text_input, param.name, value=param.default
+                )
             case _:
                 raise ValueError(
                     f"Cannot create streamlit widget for type {param.annotation} of __init__() arg {param.name}"
