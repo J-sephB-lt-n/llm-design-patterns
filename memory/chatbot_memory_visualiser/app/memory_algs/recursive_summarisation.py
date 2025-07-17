@@ -172,7 +172,7 @@ class RecursiveSummarisation(MemoryAlg):
                 content=MEMORY_ITERATION_PROMPT.format(
                     summary_max_n_sentences=self.summary_max_n_sentences,
                     previous_memory=self.chat_summary,
-                    current_context=(
+                    session_context=(
                         self.session_memory
                         if self.min_n_messages_in_session_memory == 0
                         else self.session_memory[
