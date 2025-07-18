@@ -1,5 +1,5 @@
 """
-Memory algorithm with no memory (baseline)
+Memory algorithm with no memory (simple baseline)
 """
 
 from textwrap import dedent
@@ -11,14 +11,8 @@ from app.interfaces.memory_alg_protocol import ChatMessage, ChatMessageDetail, M
 
 class NoMemory(MemoryAlg):
     """
-    Memory algorithm with no memory (baseline)
+    Memory algorithm with no memory (simple baseline)
     """
-
-    alg_description = dedent(
-        """
-        No memory whatsoever.
-        """
-    ).strip()
 
     def __init__(
         self,

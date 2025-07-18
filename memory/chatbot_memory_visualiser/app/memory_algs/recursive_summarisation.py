@@ -72,15 +72,33 @@ MEMORY_BASED_RESPONSE_GENERATION_PROMPT: Final[str] = dedent(
 
 class RecursiveSummarisation(MemoryAlg):
     """
-    Memory algorithm which keeps only a concise summary of the full chat history
+    Memory algorithm which keeps the few most recent chat messages and a concise summary of the \
+full chat history.
+
+    Based very loosely on the algorithm described in the paper "Recursively Summarizing Enables \
+Long-Term Dialogue Memory in Large Language Models" (https://arxiv.org/abs/2308.15022)
+
+    Attributes:
+        llm_client (openai.OpenAI): Model API client
+        llm_name (str): Model name (model identifier in model API)
+        llm_temperature (float): Model temperature (level of model output randomness)
+        summary_max_n_sentences (int): Model is instructed to keep the length of the full chat \
+                                        history summary to at most this many sentences.
+        summarise_every_n_user_messages (int): Model updates it's summary of the full chat \
+                                        history at this frequency.
+                                        At this point, messages are removed from "session memory" \
+                                        (in prompt) and their contents used to update the summary.
+        min_n_messages_in_session_memory (int): When messages are removed from "session memory" \
+                                        (in prompt) and included in the summary, this many \
+                                        messages (the most recent) are kept in session memory.
+        session_memory_render_style (str): Method used to show the messages in "session memory" \
+                                        to the model (in it's prompt).
+                                        One of ['json_dumps', 'plain_text'].
     """
 
     alg_description = dedent(
         """
         Periodically updates a short summary of the full chat history in order to reduce the context size.
-        Based very loosely on the algorithm described in the paper 
-        "Recursively Summarizing Enables Long-Term Dialogue Memory in Large Language Models"
-        (https://arxiv.org/abs/2308.15022)
         """
     )
 
