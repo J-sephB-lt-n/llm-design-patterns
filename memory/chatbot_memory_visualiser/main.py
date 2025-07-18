@@ -22,10 +22,7 @@ def landing_page():
         label="Select a memory algorithm to see a summary:",
         options=memory_algs.keys(),
     )
-    st.markdown(
-        "**Algorithm summary:**\n\n"
-        + memory_algs[selected_memory_alg_name].alg_description
-    )
+    st.code(memory_algs[selected_memory_alg_name].__doc__, wrap_lines=True)
 
 
 def fetch_llm_names(base_url: str, api_key: str) -> list[str] | None:
