@@ -19,7 +19,7 @@ docs: list[str] = [
 ]
 
 
-embedder = model2vec.StaticModel.from_pretrained("minishlab/potion-base-8M")
+embedder = model2vec.StaticModel.from_pretrained("minishlab/potion-retrieval-32M")
 embed_docs: np.ndarray = embedder.encode(docs)
 
 db = lancedb.connect(DB_PATH)
