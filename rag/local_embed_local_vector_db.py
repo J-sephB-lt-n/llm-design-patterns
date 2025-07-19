@@ -43,13 +43,13 @@ docs_table = db.open_table("docs_table")
 docs_table.create_fts_index("text")
 docs_table.wait_for_index(["text_idx"])
 
+rrf_reranker = RRFReranker()
+
 queries = [
     "entertainment",
     "technology",
     "jungle",
 ]
-
-reranker = RRFReranker()
 
 for query in queries:
     embed_query: np.ndarray = embedder.encode(query)
@@ -62,6 +62,7 @@ for query in queries:
         docs_table.search(query_type="hybrid")
         .vector(embed_query)
         .text(query)
+        .rerank(reranker=rrf_reranker)
         .limit(1)
         .to_list()
     )
