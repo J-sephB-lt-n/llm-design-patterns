@@ -2,9 +2,14 @@
 Entrypoint of the streamlit app
 """
 
+import atexit
 import functools
 import inspect
+import signal
+import shutil
+import sys
 from collections.abc import Callable
+from pathlib import Path
 from typing import Final, get_args, get_origin, Literal
 
 import httpx
@@ -272,19 +277,6 @@ def chat_page():
         st.rerun()
 
 
-def main():
-    PAGES: Final[dict[str, Callable]] = {
-        "Landing": landing_page,
-        "Setup": setup_page,
-        "Chat": chat_page,
-        "Memory": memory_page,
-    }
-
-    st.sidebar.title("Agent Memory Visualiser")
-    selection = st.sidebar.radio("Go to", list(PAGES.keys()))
-    PAGES[selection]()
-
-
 def memory_page():
     st.title("Memory")
     if not all(
@@ -301,6 +293,39 @@ def memory_page():
     st.markdown(f"The current algorithm is [{st.session_state.memory_alg_name}]")
     st.markdown("The current state of the algorithm's memory is:")
     st.json(st.session_state.memory_alg.view_memory_as_json())
+
+
+def app_cleanup():
+    """
+    This code is run at app exit. It deletes all files and folders in /temp_files/
+    """
+    logger.info("Deleting temporary app files")
+    for item in Path("./temp_files").iterdir():
+        if item.name == ".gitkeep":
+            continue
+        if item.is_file() or item.is_symlink():
+            item.unlink()
+        elif item.is_dir():
+            shutil.rmtree(item)
+    logger.info("Finished deleting temporary app files")
+
+
+def main():
+    Path("./temp_files/test.txt").touch()
+    PAGES: Final[dict[str, Callable]] = {
+        "Landing": landing_page,
+        "Setup": setup_page,
+        "Chat": chat_page,
+        "Memory": memory_page,
+    }
+
+    if "app_cleanup_registered" not in st.session_state:
+        atexit.register(app_cleanup)
+        st.session_state.app_cleanup_registered = True
+
+    st.sidebar.title("Agent Memory Visualiser")
+    selection = st.sidebar.radio("Go to", list(PAGES.keys()))
+    PAGES[selection]()
 
 
 if __name__ == "__main__":
