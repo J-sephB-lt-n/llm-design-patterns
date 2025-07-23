@@ -94,6 +94,8 @@ Long-Term Dialogue Memory in Large Language Models" (https://arxiv.org/abs/2308.
         session_memory_render_style (str): Method used to show the messages in "session memory" \
                                         to the model (in it's prompt).
                                         One of ['json_dumps', 'plain_text'].
+                                        'plain_text' looks like "USER: ...<br>ASSISTANT: ..."
+                                        'json_dumps' gives standard chat completion messages JSON
     """
 
     alg_description = dedent(

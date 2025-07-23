@@ -12,6 +12,7 @@ import numpy as np
 import openai
 import pyarrow as pa
 from lancedb.rerankers import RRFReranker
+from loguru import logger
 
 from app.interfaces.memory_alg_protocol import ChatMessage, ChatMessageDetail, MemoryAlg
 
@@ -25,6 +26,7 @@ class VectorMemory(MemoryAlg):
         llm_client (openai.OpenAI): Model API client
         llm_name (str): Model name (model identifier in model API)
         llm_temperature (float): Model temperature (level of model output randomness)
+        system_prompt (str): Preliminary instructions given to the language model
         n_chat_messages_in_working_memory (int): Number of most recent chat messages to keep in working 
                                             memory (model prompt).
                                             Messages older than this are embedded and written to 
@@ -38,6 +40,11 @@ class VectorMemory(MemoryAlg):
                                     "chat_message" simply stores each chat message directly.
                                     "extracted_facts" uses an LLM to extract facts from each chat \
                                         message then embeds these facts and writes them to the db. 
+        message_render_style (str): Controls how chat messages are rendered when including them in \
+                                        model prompts.
+                                        One of ['json_dumps', 'plain_text'].
+                                        'plain_text' looks like "USER: ...<br>ASSISTANT: ..."
+                                        'json_dumps' gives standard chat completion messages JSON
     """
 
     def __init__(
@@ -45,23 +52,36 @@ class VectorMemory(MemoryAlg):
         llm_client: openai.OpenAI,
         llm_name: str,
         llm_temperature: float,
+        system_prompt: str = "You are a creative assistant helping a user to solve their problem.",
         n_chat_messages_in_working_memory: int = 10,
         n_vector_memories_to_fetch: int = 5,
         vector_search_method: Literal["semantic_dense", "hybrid"] = "hybrid",
         vector_memory_type: Literal["chat_message", "extracted_facts"] = "chat_message",
+        message_render_style: Literal["plain_text", "json_dumps"] = "plain_text",
     ) -> None:
         self.chat_history: list[ChatMessageDetail] = []
+        self.recent_chat_messages: list[ChatMessage] = []
         self.llm_client = llm_client
         self.llm_name = llm_name
         self.llm_temperature = llm_temperature
+        self.system_prompt = system_prompt
         self.n_chat_messages_in_working_memory = n_chat_messages_in_working_memory
         self.n_vector_memories_to_fetch = n_vector_memories_to_fetch
-        self.vector_search_method = vector_search_method
-        self.vector_memory_type = vector_memory_type
+        self.vector_search_method: Literal["semantic_dense", "hybrid"] = (
+            vector_search_method
+        )
+        self.vector_memory_type: Literal["chat_message", "extracted_facts"] = (
+            vector_memory_type
+        )
+        self.message_render_style: Literal["plain_text", "json_dumps"] = (
+            message_render_style
+        )
 
         self.embed_model = model2vec.StaticModel.from_pretrained(
             "minishlab/potion-retrieval-32M"
         )
+
+        # set up temporary vector database on filesystem #
         self.vector_db = lancedb.connect(Path("temp_files/vector_memory_db"))
         self.vector_memories = self.vector_db.create_table(
             name="memories",
@@ -78,9 +98,10 @@ class VectorMemory(MemoryAlg):
                 ],
             ),
         )
-        self.vector_memories.create_fts_index("text")
-        self.vector_memories.wait_for_index("text_idx")
-        self.reranker = RRFReranker()
+        if self.vector_search_method == "hybrid":
+            self.vector_memories.create_fts_index("text")
+            self.vector_memories.wait_for_index("text_idx")
+            self.reranker = RRFReranker()
 
     def add_vector_memory(self, text: str) -> None:
         """
@@ -127,4 +148,55 @@ class VectorMemory(MemoryAlg):
         """
         Process a new user message, update memory and chat history
         """
+        self.recent_chat_messages.append(
+            ChatMessage(
+                role="user",
+                message=user_msg,
+            )
+        )
+        relevant_memories: list[str] = self.fetch_relevant_memories(
+            query=self.chat_messages_to_text(
+                messages=self.recent_chat_messages,
+                output_style=self.message_render_style,
+            ),
+            n_to_fetch=self.n_vector_memories_to_fetch,
+            search_method=self.vector_search_method,
+        )
+        prompt_messages: list[ChatMessage] = [
+            ChatMessage(role="system", content=self.system_prompt),
+            self.augment_user_msg(user_msg, relevant_memories),
+        ]
+        logger.debug([msg.model_dump() for msg in prompt_messages])
+        llm_api_response = self.llm_client.chat.completions.create(
+            model=self.llm_name,
+            temperature=self.llm_temperature,
+            messages=[msg.model_dump() for msg in self.recent_chat_messages],
+        )
+
+    def augment_user_msg(
+        user_message: str,
+        relevant_memories: list[str],
+    ) -> ChatMessage:
+        """ """
         ...
+
+    def chat_messages_to_text(
+        self,
+        messages: list[ChatMessage],
+        output_style: Literal["json_dumps", "plain_text"],
+    ) -> str:
+        """
+        Represent sequence of chat-completion messages as a single string
+        """
+        match output_style:
+            case "json_dumps":
+                return json.dumps(
+                    [msg.model_dump() for msg in messages],
+                    indent=4,
+                )
+            case "plain_text":
+                return "\n".join(
+                    [f"{msg.role.upper()}: {msg.content}" for msg in messages]
+                )
+            case _:
+                raise ValueError(f"Unknown output style '{output_style}'")
