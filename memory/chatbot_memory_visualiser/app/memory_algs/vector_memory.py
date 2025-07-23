@@ -3,6 +3,7 @@ Memory algorithm which stores the few most recent chat messages and the full cha
 in a vector database
 """
 
+import json
 from pathlib import Path
 from typing import Literal
 
@@ -31,6 +32,8 @@ class VectorMemory(MemoryAlg):
                                             memory (model prompt).
                                             Messages older than this are embedded and written to 
                                             the vector database.
+                                            In this context, 1 user message + 1 assistant response is considered \
+                                            1 'message'
         n_vector_memories_to_fetch (int): In every chat completion, this number of chat messages will be 
                                             fetched from the full chat history (vector database) 
                                             and included in the model prompt.
@@ -162,23 +165,88 @@ class VectorMemory(MemoryAlg):
             n_to_fetch=self.n_vector_memories_to_fetch,
             search_method=self.vector_search_method,
         )
-        prompt_messages: list[ChatMessage] = [
-            ChatMessage(role="system", content=self.system_prompt),
-            self.augment_user_msg(user_msg, relevant_memories),
-        ]
+        prompt_messages: list[ChatMessage] = (
+            [ChatMessage(role="system", content=self.system_prompt)]
+            + self.recent_chat_messages
+            + [self.augment_user_msg(user_msg, relevant_memories)]
+        )
         logger.debug([msg.model_dump() for msg in prompt_messages])
         llm_api_response = self.llm_client.chat.completions.create(
             model=self.llm_name,
             temperature=self.llm_temperature,
             messages=[msg.model_dump() for msg in self.recent_chat_messages],
         )
+        assistant_response: ChatMessage = ChatMessage(
+            role=llm_api_response.choices[0].message.role,
+            content=llm_api_response.choices[0].message.content,
+        )
+        self.recent_chat_messages.append(assistant_response)
+        self.chat_history.append(
+            ChatMessageDetail(
+                visible_messages=[
+                    ChatMessage(role="user", message=user_msg),
+                    assistant_response,
+                ],
+                all_messages=prompt_messages + [assistant_response],
+                token_usage=llm_api_response.usage.model_dump(),
+            )
+        )
+        if len(self.recent_chat_messages) / 2 > self.n_chat_messages_in_working_memory:
+            messages_to_archive: list[ChatMessage] = self.recent_chat_messages[:2]
+            self.recent_chat_messages = self.recent_chat_messages[2:]
+            match self.vector_memory_type:
+                case "chat_message":
+                    self.add_vector_memory(
+                        self.chat_messages_to_text(
+                            messages=messages_to_archive,
+                            output_style=self.message_render_style,
+                        )
+                    )
+                case "extracted_facts":
+                    facts: list[str] = self.extract_facts(messages_to_archive)
+                    for fact in facts:
+                        self.add_vector_memory(fact)
 
     def augment_user_msg(
+        self,
         user_message: str,
         relevant_memories: list[str],
     ) -> ChatMessage:
-        """ """
-        ...
+        """
+        Add context (recent chat history and retrieved long-term memories) to user message
+        """
+        return ChatMessage(
+            role="user",
+            message=f"""
+<possibly-relevant-memories>
+{"\n".join(str(num) + ". " + memory for num, memory in enumerate(relevant_memories, start=1))}
+</possibly-relevant-memories>
+
+<recent-chat-history>
+{self.chat_messages_to_text(self.recent_chat_messages, self.message_render_style)}
+</recent-chat-history>
+
+<user-query>
+{user_message}
+</user-query>
+""".strip(),
+        )
+
+    def extract_facts(
+        self,
+        messages=list[ChatMessage],
+    ) -> list[str]:
+        """
+        Extract facts relevant to the conversation from a subset of a chat
+        """
+        prompt_messages: list[ChatMessage] = [
+            ChatMessage(role="system", content=self.system_prompt)
+        ]
+        llm_api_response = self.llm_client.chat_completions.create(
+            model=self.llm_name,
+            temperature=self.llm_temperature,
+            messages=[msg.model_dump() for msg in prompt_messages],
+        )
 
     def chat_messages_to_text(
         self,
