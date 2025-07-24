@@ -154,7 +154,7 @@ def question_answering_page():
         ],
         horizontal=True,
     )
-    user_query = st.text_input(label="Enter your question(s)")
+    user_query = st.text_area(label="Enter your question(s)")
     start_button = st.button(label="Start")
 
     if not start_button:
