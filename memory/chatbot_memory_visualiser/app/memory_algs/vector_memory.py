@@ -4,6 +4,7 @@ in a vector database
 """
 
 import json
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -29,20 +30,17 @@ class VectorMemory(MemoryAlg):
         llm_temperature (float): Model temperature (level of model output randomness)
         system_prompt (str): Preliminary instructions given to the language model
         n_chat_messages_in_working_memory (int): Number of most recent chat messages to keep in working 
-                                            memory (model prompt).
-                                            Messages older than this are embedded and written to 
-                                            the vector database.
-                                            In this context, 1 user message + 1 assistant response is considered \
-                                            1 'message'
+                    memory (model prompt).
+                    Messages older than this are embedded and written to the vector database.
+                    In this context, 1 user message + 1 assistant response is considered 1 'message'
         n_vector_memories_to_fetch (int): In every chat completion, this number of chat messages will be 
-                                            fetched from the full chat history (vector database) 
-                                            and included in the model prompt.
+                    fetched from the full chat history (vector database) and included in the model prompt.
         vector_search_method (str): Search algorithm used for fetching memories from the vector database
-                                    One of ['semantic_dense', 'hybrid']
+                    One of ['semantic_dense', 'hybrid']
         vector_memory_type (str): Format used to generate vector memories.
-                                    "chat_message" simply stores each chat message directly.
-                                    "extracted_facts" uses an LLM to extract facts from each chat \
-                                        message then embeds these facts and writes them to the db. 
+                    "chat_message" simply stores each chat message directly.
+                    "extracted_facts" uses an LLM to extract facts from each chat message then \
+                    embeds these facts and writes them to the vector database. 
         message_render_style (str): Controls how chat messages are rendered when including them in \
                                         model prompts.
                                         One of ['json_dumps', 'plain_text'].
@@ -203,7 +201,9 @@ class VectorMemory(MemoryAlg):
                         )
                     )
                 case "extracted_facts":
-                    facts: list[str] = self.extract_facts(messages_to_archive)
+                    facts: list[str] = self.extract_facts_from_chat_snippet(
+                        messages_to_archive
+                    )
                     for fact in facts:
                         self.add_vector_memory(fact)
 
@@ -232,21 +232,50 @@ class VectorMemory(MemoryAlg):
 """.strip(),
         )
 
-    def extract_facts(
+    def extract_facts_from_chat_snippet(
         self,
         messages=list[ChatMessage],
     ) -> list[str]:
         """
         Extract facts relevant to the conversation from a subset of a chat
         """
+        prompt: str = f"""
+<conversation-snippet>
+{self.chat_messages_to_text(messages=messages, output_style=self.message_render_style)}
+</conversation-snippet>
+
+From the given conversation snippet, extract all facts. These facts will be retrieved by the \
+assistant in order to generate informed replies in future conversations with this user.
+
+Return the facts as a list of strings contained within a JSON markdown code block
+
+<example-output-format>
+```json
+["fact 1 here", "fact 2 here", ...]
+```
+</example-output-format>
+                """
+        logger.debug(prompt)
         prompt_messages: list[ChatMessage] = [
-            ChatMessage(role="system", content=self.system_prompt)
+            ChatMessage(role="system", content=self.system_prompt),
+            ChatMessage(
+                role="user",
+                content=prompt,
+            ),
         ]
         llm_api_response = self.llm_client.chat_completions.create(
             model=self.llm_name,
             temperature=self.llm_temperature,
             messages=[msg.model_dump() for msg in prompt_messages],
         )
+        extracted_facts: list[str] = json.loads(
+            re.search(
+                r"```json\s*\n(?P<facts>.*?)\n```",
+                llm_api_response.choices[0].message.content,
+            ).group(),
+        )
+        logger.debug(json.dumps(extracted_facts, indent=4))
+        return extracted_facts
 
     def chat_messages_to_text(
         self,
@@ -268,3 +297,16 @@ class VectorMemory(MemoryAlg):
                 )
             case _:
                 raise ValueError(f"Unknown output style '{output_style}'")
+
+    def view_memory_as_json(self) -> dict:
+        """
+        Render latest state of the agent's memory as a dict
+        """
+        return {
+            "recent_chat_history": [
+                msg.model_dump() for msg in self.recent_chat_messages
+            ],
+            "long_term_chat_history": [
+                x["text"] for x in self.vector_memories.to_list()
+            ],
+        }
