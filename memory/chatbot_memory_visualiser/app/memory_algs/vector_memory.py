@@ -57,7 +57,9 @@ class VectorMemory(MemoryAlg):
         n_chat_messages_in_working_memory: int = 10,
         n_vector_memories_to_fetch: int = 5,
         vector_search_method: Literal["semantic_dense", "hybrid"] = "hybrid",
-        vector_memory_type: Literal["chat_message", "extracted_facts"] = "chat_message",
+        vector_memory_type: Literal[
+            "chat_message", "extracted_facts"
+        ] = "extracted_facts",
         message_render_style: Literal["plain_text", "json_dumps"] = "plain_text",
     ) -> None:
         self.chat_history: list[ChatMessageDetail] = []
@@ -101,7 +103,6 @@ class VectorMemory(MemoryAlg):
         )
         if self.vector_search_method == "hybrid":
             self.vector_memories.create_fts_index("text")
-            self.vector_memories.wait_for_index("text_idx")
             self.reranker = RRFReranker()
 
     def add_vector_memory(self, text: str) -> None:
@@ -134,7 +135,8 @@ class VectorMemory(MemoryAlg):
                 )
             case "hybrid":
                 search_results = (
-                    self.vector_memories.vector(embed_query)
+                    self.vector_memories.search(query_type="hybrid")
+                    .vector(embed_query)
                     .text(query)
                     .rerank(self.reranker)
                     .limit(n_to_fetch)
@@ -152,7 +154,7 @@ class VectorMemory(MemoryAlg):
         self.recent_chat_messages.append(
             ChatMessage(
                 role="user",
-                message=user_msg,
+                content=user_msg,
             )
         )
         relevant_memories: list[str] = self.fetch_relevant_memories(
@@ -165,7 +167,7 @@ class VectorMemory(MemoryAlg):
         )
         prompt_messages: list[ChatMessage] = (
             [ChatMessage(role="system", content=self.system_prompt)]
-            + self.recent_chat_messages
+            # + self.recent_chat_messages
             + [self.augment_user_msg(user_msg, relevant_memories)]
         )
         logger.debug([msg.model_dump() for msg in prompt_messages])
@@ -178,11 +180,14 @@ class VectorMemory(MemoryAlg):
             role=llm_api_response.choices[0].message.role,
             content=llm_api_response.choices[0].message.content,
         )
+        logger.debug(
+            assistant_response.model_dump_json(indent=4),
+        )
         self.recent_chat_messages.append(assistant_response)
         self.chat_history.append(
             ChatMessageDetail(
                 visible_messages=[
-                    ChatMessage(role="user", message=user_msg),
+                    ChatMessage(role="user", content=user_msg),
                     assistant_response,
                 ],
                 all_messages=prompt_messages + [assistant_response],
@@ -217,13 +222,13 @@ class VectorMemory(MemoryAlg):
         """
         return ChatMessage(
             role="user",
-            message=f"""
+            content=f"""
 <possibly-relevant-memories>
 {"\n".join(str(num) + ". " + memory for num, memory in enumerate(relevant_memories, start=1))}
 </possibly-relevant-memories>
 
 <recent-chat-history>
-{self.chat_messages_to_text(self.recent_chat_messages, self.message_render_style)}
+{self.chat_messages_to_text(self.recent_chat_messages[:-1], self.message_render_style)}
 </recent-chat-history>
 
 <user-query>
@@ -244,10 +249,12 @@ class VectorMemory(MemoryAlg):
 {self.chat_messages_to_text(messages=messages, output_style=self.message_render_style)}
 </conversation-snippet>
 
-From the given conversation snippet, extract all facts. These facts will be retrieved by the \
-assistant in order to generate informed replies in future conversations with this user.
+From the given conversation snippet, extract all facts (distinct pieces of knowledge). \
+These facts will be retrieved by the assistant (you) in order to generate informed \
+replies in future conversations with this user.
 
-Return the facts as a list of strings contained within a JSON markdown code block
+Return the facts as a list of strings contained within a JSON markdown code block. If there \
+are no facts, return an empty list.
 
 <example-output-format>
 ```json
@@ -263,18 +270,33 @@ Return the facts as a list of strings contained within a JSON markdown code bloc
                 content=prompt,
             ),
         ]
-        llm_api_response = self.llm_client.chat_completions.create(
+        llm_api_response = self.llm_client.chat.completions.create(
             model=self.llm_name,
             temperature=self.llm_temperature,
             messages=[msg.model_dump() for msg in prompt_messages],
         )
+        logger.debug(llm_api_response.choices[0].message.content)
         extracted_facts: list[str] = json.loads(
             re.search(
                 r"```json\s*\n(?P<facts>.*?)\n```",
                 llm_api_response.choices[0].message.content,
-            ).group(),
+                re.DOTALL,
+            ).group("facts"),
         )
         logger.debug(json.dumps(extracted_facts, indent=4))
+        self.chat_history.append(
+            ChatMessageDetail(
+                visible_messages=[],
+                all_messages=prompt_messages
+                + [
+                    ChatMessage(
+                        role="assistant",
+                        content=llm_api_response.choices[0].message.content,
+                    )
+                ],
+                token_usage=llm_api_response.usage.model_dump(),
+            )
+        )
         return extracted_facts
 
     def chat_messages_to_text(

@@ -311,7 +311,6 @@ def app_cleanup():
 
 
 def main():
-    Path("./temp_files/test.txt").touch()
     PAGES: Final[dict[str, Callable]] = {
         "Landing": landing_page,
         "Setup": setup_page,
