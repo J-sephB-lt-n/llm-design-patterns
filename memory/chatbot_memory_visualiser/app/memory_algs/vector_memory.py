@@ -329,6 +329,6 @@ are no facts, return an empty list.
                 msg.model_dump() for msg in self.recent_chat_messages
             ],
             "long_term_chat_history": [
-                x["text"] for x in self.vector_memories.to_list()
+                x["text"] for x in self.vector_memories.search().to_list()
             ],
         }
