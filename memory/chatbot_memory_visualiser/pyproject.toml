@@ -9,6 +9,7 @@ dependencies = [
     "lancedb>=0.24.1",
     "loguru>=0.7.3",
     "model2vec>=0.6.0",
+    "networkx>=3.5",
     "openai>=1.92.3",
     "streamlit>=1.46.1",
 ]

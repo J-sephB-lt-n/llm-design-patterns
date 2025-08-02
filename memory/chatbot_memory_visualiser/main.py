@@ -5,9 +5,7 @@ Entrypoint of the streamlit app
 import atexit
 import functools
 import inspect
-import signal
 import shutil
-import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Final, get_args, get_origin, Literal

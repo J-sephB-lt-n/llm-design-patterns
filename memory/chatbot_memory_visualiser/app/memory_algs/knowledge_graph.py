@@ -6,10 +6,11 @@ in a vector database
 import json
 import re
 from pathlib import Path
-from typing import Literal
+from typing import Final, Literal
 
 import lancedb
 import model2vec
+import networkx as nx
 import numpy as np
 import openai
 import pyarrow as pa
@@ -17,6 +18,61 @@ from lancedb.rerankers import RRFReranker
 from loguru import logger
 
 from app.interfaces.memory_alg_protocol import ChatMessage, ChatMessageDetail, MemoryAlg
+
+LLM_SYSTEM_PROMPT: Final[str] = """
+You are a creative assistant who is having a conversation with a user
+""".strip()
+
+LLM_RESPOND_PROMPT: Final[str] = """
+<potentially-relevant-information>
+{retrieved_knowledge}
+</potentially-relevant-information>
+
+<recent-chat-history>
+{recent_chat_history}
+</recent-chat-history>
+
+<latest-user-message>
+{latest_use_message}
+</user-user-message>
+
+By referring to your most recent interaction with the user ("recent chat history") and the \
+potentially relevant information retrieved from the long-term chat history (if relevant), \
+respond the latest user message.
+""".strip()
+
+LLM_RDF_TRIPLES_DEDUP_PROMPT: Final[str] = """
+<proposed-new-knowledge-triples>
+```json
+{new_rdf_triples}
+```
+</proposed-new-knowledge-triples>
+
+You have been provided with a list of new knowledge (RDF) triples proposed to be added to \
+the existing knowledge database. For each proposed new triple, the closest {n_closest_triples} \
+existing knowledge triples in the database are shown.
+
+Your task is as follows:
+
+1. Decide which of the proposed new triples should be added to the database - return just the \
+list of triples to add. Omit triples whose knowledge content is already in the database (i.e. \
+omit those that do not add any new information).
+2. If one of the new proposed triples contains a formatting inconsistency with one of the \
+triples in the existing knowledge database (e.g. the same subject/object is referenced but \
+with a difference in punctuation or case), then correct it in your list of triples to add.
+
+<required-output-format>
+Your response must include a JSON markdown codeblock containing a single list of lists, where \
+each inner list contains exactly 3 strings (subject, predicate, object):
+```json
+[
+    ["subject", "predicate", "object"],
+    [...],
+    ...
+]
+```
+</required-output-format>
+"""
 
 
 class KnowledgeGraphMemory(MemoryAlg):
@@ -26,7 +82,7 @@ class KnowledgeGraphMemory(MemoryAlg):
     More specifically, the algorithm works as follows:
         - At each new user message in the chat, a LLM is used to extract semantic (RDF) triples \
 from the last `triples_source_n_msgs` chat messages in the conversation
-        - The subject, predicate and objects text content are cleaned, to prevent duplication \
+        - The subject, predicate and object text content are cleaned, to prevent duplication \
 in the graph (strip, lowercase etc.)
         - These new triples are deduped against the existing knowledge triples already in the \
 graph using a LLM to make the decisions
@@ -34,9 +90,11 @@ graph using a LLM to make the decisions
 object as nodes and the predicate as an edge.
         - The content of the new nodes (subject and object) is embedded and added into a vector \
 database (for later lookup)
-        - Each new user chat message is augmented with knowledge context as follows:
+        - Each new user chat message is processed as follows:
+            - The last `recent_chat_history_n_messages` (including the new user message) are \
+              included in the prompt
             - The nearest `n_context_nodes` nodes whose content is most similar to the combined \
-content of the last `context_n_messages` chat messages are retrieved.
+content of the last `context_n_messages` most recent chat messages are retrieved.
             - For each of these retrieved nodes, the graph is traversed by `n_context_hops` \
 steps, and all of the knowledge triples explored this way are included as context in the prompt.
 
@@ -49,58 +107,62 @@ steps, and all of the knowledge triples explored this way are included as contex
 knowledge triples
         n_context_nodes (int): Number of initial nodes fetched from the knowledge graph when \
 adding knowledge context to the prompt
-        context_n_messages (int): Number of most recent chat messages to use in as query when \
-fetching most relevant nodes from the graph 
+        context_n_messages (int): Number of most recent chat messages to use as query when \
+fetching the most relevant nodes from the graph 
         n_context_hops (int): Number of steps to take when traversing the graph to find \
 possibly related knowledge, outward from the first `n_context_nodes` nodes found.
         vector_search_method (str): Approach used for fetching nodes from the vector database
             One of ['semantic_dense', 'hybrid']
         message_render_style (str): Controls how chat messages are rendered when including them in \
-model prompts.
-            One of ['json_dumps', 'plain_text'].
-            'plain_text' looks like "USER: ...<br>ASSISTANT: ...<br>"
-            'json_dumps' gives standard openai-style chat completion messages JSON
+            model prompts.
+            One of ['json_dumps', 'plain_text', 'xml'].
+            'plain_text' looks like "USER: ...<br>ASSISTANT: ...<br> ..."
+            'json_dumps' gives standard chat completion messages JSON
+            'xml' looks like "<user>...</user> <assistant>...</assistant> ..."
     """
+
     def __init__(
         self,
         llm_client: openai.OpenAI,
         llm_name: str,
         llm_temperature: float,
-        system_prompt: str = "You are a creative assistant helping a user to solve their problem.",
-        n_chat_messages_in_working_memory: int = 10,
-        n_vector_memories_to_fetch: int = 5,
+        system_prompt: str = LLM_SYSTEM_PROMPT,
+        recent_chat_history_n_messages: int = 10,
+        triples_source_n_messages: int = 4,
+        n_context_nodes: int = 3,
+        context_n_messages: int = 6,
+        n_context_hops: int = 1,
         vector_search_method: Literal["semantic_dense", "hybrid"] = "hybrid",
-        vector_memory_type: Literal[
-            "chat_message", "extracted_facts"
-        ] = "extracted_facts",
-        message_render_style: Literal["plain_text", "json_dumps"] = "plain_text",
+        message_render_style: Literal["plain_text", "json_dumps", "xml"] = "plain_text",
     ) -> None:
+        if recent_chat_history_n_messages < context_n_messages:
+            raise ValueError(
+                "`context_n_messages` cannot exceed number of messages in recent chat "
+                "history (`recent_chat_history_n_messages`)"
+            )
         self.chat_history: list[ChatMessageDetail] = []
         self.recent_chat_messages: list[ChatMessage] = []
+
         self.llm_client = llm_client
         self.llm_name = llm_name
         self.llm_temperature = llm_temperature
         self.system_prompt = system_prompt
-        self.n_chat_messages_in_working_memory = n_chat_messages_in_working_memory
-        self.n_vector_memories_to_fetch = n_vector_memories_to_fetch
-        self.vector_search_method: Literal["semantic_dense", "hybrid"] = (
-            vector_search_method
-        )
-        self.vector_memory_type: Literal["chat_message", "extracted_facts"] = (
-            vector_memory_type
-        )
-        self.message_render_style: Literal["plain_text", "json_dumps"] = (
-            message_render_style
-        )
+        self.recent_chat_history_n_messages = recent_chat_history_n_messages
+        self.triples_source_n_messages = triples_source_n_messages
+        self.n_context_nodes = n_context_nodes
+        self.context_n_messages = context_n_messages
+        self.n_context_hops = n_context_hops
+        self.vector_search_method = vector_search_method
+        self.message_render_style = message_render_style
 
         self.embed_model = model2vec.StaticModel.from_pretrained(
             "minishlab/potion-retrieval-32M"
         )
 
         # set up temporary vector database on filesystem #
-        self.vector_db = lancedb.connect(Path("temp_files/vector_memory_db"))
-        self.vector_memories = self.vector_db.create_table(
-            name="memories",
+        self.vector_db = lancedb.connect(Path("temp_files/graph_memory_nodes_db"))
+        self.node_embeddings = self.vector_db.create_table(
+            name="graph_nodes",
             schema=pa.schema(
                 [
                     pa.field("text", pa.string()),
@@ -115,14 +177,14 @@ model prompts.
             ),
         )
         if self.vector_search_method == "hybrid":
-            self.vector_memories.create_fts_index("text")
+            self.node_embeddings.create_fts_index("text")
             self.reranker = RRFReranker()
 
-    def add_vector_memory(self, text: str) -> None:
+    def add_node_to_vector_db(self, text: str) -> None:
         """
-        Write a memory into the vector database
+        Write a node into the vector database
         """
-        self.vector_memories.add(
+        self.node_embeddings.add(
             [
                 {
                     "text": text,
