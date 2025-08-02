@@ -3,6 +3,7 @@ Memory algorithm which stores the few most recent chat messages and the full cha
 in a vector database
 """
 
+import itertools
 import json
 import re
 from pathlib import Path
@@ -155,6 +156,9 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
         self.vector_search_method = vector_search_method
         self.message_render_style = message_render_style
 
+        self.graph = nx.DiGraph()
+        self.node_counter = itertools.count(start=1)
+
         self.embed_model = model2vec.StaticModel.from_pretrained(
             "minishlab/potion-retrieval-32M"
         )
@@ -180,27 +184,34 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
             self.node_embeddings.create_fts_index("text")
             self.reranker = RRFReranker()
 
-    def add_node_to_vector_db(self, text: str) -> None:
+    def add_knowledge_triple(
+        self, 
+        subject: str,
+        predicate: str,
+        object: str,
+    ) -> None:
         """
-        Write a node into the vector database
+        Adds knowledge triple into the knowledge graph and subject and predicate as \
+nodes in the vector database
         """
         self.node_embeddings.add(
             [
                 {
                     "text": text,
+                    "node_id": 
                     "vector": self.embed_model.encode(text),
                 }
             ]
         )
 
-    def fetch_relevant_memories(
+    def fetch_relevant_nodes(
         self,
         query: str,
         n_to_fetch: int,
         search_method: Literal["semantic_dense", "hybrid"],
     ) -> list[str]:
         """
-        Fetch `n_to_fetch` closest memories to `query` from the vector database using `search_method`
+        Fetch `n_to_fetch` closest nodes to `query` from the vector database using `search_method`
         """
         embed_query: np.ndarray = self.embed_model.encode(query)
         match search_method:
@@ -232,13 +243,13 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
                 content=user_msg,
             )
         )
-        relevant_memories: list[str] = self.fetch_relevant_memories(
-            query=self.chat_messages_to_text(
-                messages=self.recent_chat_messages,
-                output_style=self.message_render_style,
-            ),
-            n_to_fetch=self.n_vector_memories_to_fetch,
-            search_method=self.vector_search_method,
+        relevant_nodes: list["TODO"] = self.fetch_relevant_nodes(
+            # query=self.chat_messages_to_text(
+            #     messages=self.recent_chat_messages,
+            #     output_style=self.message_render_style,
+            # ),
+            # n_to_fetch=self.n_vector_memories_to_fetch,
+            # search_method=self.vector_search_method,
         )
         prompt_messages: list[ChatMessage] = (
             [ChatMessage(role="system", content=self.system_prompt)]
