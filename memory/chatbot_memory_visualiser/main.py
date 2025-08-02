@@ -223,14 +223,12 @@ def setup_page():
         alg_setup_controls = init_args_to_streamlit_controls(
             memory_algs[st.session_state.memory_alg_name]
         )
-        logger.error(alg_setup_controls)
         alg_setup = {}
         if st.session_state.memory_alg_kwargs:
             st.text("Current args:")
             st.json(st.session_state.memory_alg_kwargs)
         for param, input_control in alg_setup_controls.items():
             alg_setup[param] = input_control()
-        logger.error(alg_setup)
         submit_memory_alg_params = st.form_submit_button(
             label="Submit Memory Alg Parameters",
         )
