@@ -6,8 +6,10 @@ in a vector database
 import itertools
 import json
 import re
+import unicodedata
+from collections import deque
 from pathlib import Path
-from typing import Final, Literal
+from typing import Final, Literal, NamedTuple
 
 import lancedb
 import model2vec
@@ -20,11 +22,14 @@ from loguru import logger
 
 from app.interfaces.memory_alg_protocol import ChatMessage, ChatMessageDetail, MemoryAlg
 
-LLM_SYSTEM_PROMPT: Final[str] = """
+LLM_SYSTEM_PROMPT: Final[str] = (
+    """
 You are a creative assistant who is having a conversation with a user
 """.strip()
+)
 
-LLM_RESPOND_PROMPT: Final[str] = """
+LLM_RESPOND_PROMPT: Final[str] = (
+    """
 <potentially-relevant-information>
 {retrieved_knowledge}
 </potentially-relevant-information>
@@ -41,8 +46,34 @@ By referring to your most recent interaction with the user ("recent chat history
 potentially relevant information retrieved from the long-term chat history (if relevant), \
 respond the latest user message.
 """.strip()
+)
 
-LLM_RDF_TRIPLES_DEDUP_PROMPT: Final[str] = """
+LLM_EXTRACT_KNOWLEDGE_TRIPLES_PROMPT: Final[str] = (
+    """
+<conversation-snippet>
+{conversation_snippet}
+</conversation-snippet>
+
+From the provided conversation snippet between a user and an assistant, extract all information \
+in the form of a list of fact triples.
+
+<required-output-format>
+Your response must include a JSON markdown codeblock containing a single list of lists, where \
+each inner list contains exactly 3 strings (subject, predicate, object):
+```json
+[
+    ["subject", "predicate", "object"],
+    [...],
+    ...
+]
+```
+</required-output-format>
+""".strip()
+)
+
+LLM_RDF_TRIPLES_DEDUP_PROMPT: Final[
+    str
+] = """
 <proposed-new-knowledge-triples>
 ```json
 {new_rdf_triples}
@@ -74,6 +105,12 @@ each inner list contains exactly 3 strings (subject, predicate, object):
 ```
 </required-output-format>
 """
+
+
+class KnowledgeTriple(NamedTuple):
+    subj: str
+    pred: str
+    obj: str
 
 
 class KnowledgeGraphMemory(MemoryAlg):
@@ -142,7 +179,9 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
                 "history (`recent_chat_history_n_messages`)"
             )
         self.chat_history: list[ChatMessageDetail] = []
-        self.recent_chat_messages: list[ChatMessage] = []
+        self.recent_chat_messages: deque[ChatMessage] = deque(
+            maxlen=recent_chat_history_n_messages
+        )
 
         self.llm_client = llm_client
         self.llm_name = llm_name
@@ -184,54 +223,132 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
             self.node_embeddings.create_fts_index("text")
             self.reranker = RRFReranker()
 
-    def add_knowledge_triple(
-        self, 
-        subject: str,
-        predicate: str,
-        object: str,
-    ) -> None:
+    def normalise_text(self, text: str) -> str:
         """
-        Adds knowledge triple into the knowledge graph and subject and predicate as \
-nodes in the vector database
+        Simplifies text as far as possible, including diacritic removal
         """
-        self.node_embeddings.add(
-            [
-                {
-                    "text": text,
-                    "node_id": 
-                    "vector": self.embed_model.encode(text),
-                }
-            ]
-        )
+        text = unicodedata.normalize("NFKD", text)
+        text = text.encode("ASCII", "ignore").decode("ASCII")
+        text = re.sub(r"[^a-zA-Z0-9]", "", text)
+        text = text.lower().strip()
 
-    def fetch_relevant_nodes(
+        return text
+
+    def chat_messages_to_text(
         self,
-        query: str,
-        n_to_fetch: int,
-        search_method: Literal["semantic_dense", "hybrid"],
-    ) -> list[str]:
+        messages: list[ChatMessage],
+        message_render_style: Literal["json_dumps", "plain_text", "xml"],
+    ) -> str:
         """
-        Fetch `n_to_fetch` closest nodes to `query` from the vector database using `search_method`
+        Represent sequence of chat-completion messages as a single string
         """
-        embed_query: np.ndarray = self.embed_model.encode(query)
-        match search_method:
-            case "semantic_dense":
-                search_results = (
-                    self.vector_memories.search(embed_query).limit(n_to_fetch).to_list()
+        match message_render_style:
+            case "json_dumps":
+                return json.dumps(
+                    [msg.model_dump() for msg in messages],
+                    indent=4,
                 )
-            case "hybrid":
-                search_results = (
-                    self.vector_memories.search(query_type="hybrid")
-                    .vector(embed_query)
-                    .text(query)
-                    .rerank(self.reranker)
-                    .limit(n_to_fetch)
-                    .to_list()
+            case "plain_text":
+                return "\n".join(
+                    [f"{msg.role.upper()}: {msg.content}" for msg in messages]
+                )
+            case "xml":
+                return "\n".join(
+                    [f"<{msg.role}>\n{msg.content}\n</{msg.role}>" for msg in messages]
                 )
             case _:
-                raise ValueError(f"Unknown search_method='{search_method}'")
+                raise ValueError(f"Unknown output style '{message_render_style}'")
 
-        return [x["text"] for x in search_results]
+    #     def add_knowledge_triple(
+    #         self,
+    #         subject: str,
+    #         predicate: str,
+    #         object_: str,
+    #     ) -> None:
+    #         """
+    #         Adds knowledge triple into the knowledge graph and subject and predicate as \
+    # nodes in the vector database
+    #         """
+    #         subject = self.normalise_text(subject)
+    #         predicate = self.normalise_text(predicate)
+    #         object_ = self.normalise_text(object_)
+    #
+    #         self.node_embeddings.add(
+    #             [
+    #                 {
+    #                     "text": "TODO",
+    #                     "node_id": "TODO",
+    #                     "vector": self.embed_model.encode("TODO"),
+    #                 }
+    #             ]
+    #         )
+
+    # def fetch_relevant_knowledge_triples(
+    #     self,
+    #     query: str,
+    # ) -> list[KnowledgeTriple]:
+    #     """
+    #     Fetch existing semantic triples closest to `query`
+    #     """
+    #     embed_query: np.ndarray = self.embed_model.encode(query)
+    #     match search_method:
+    #         case "semantic_dense":
+    #             search_results = (
+    #                 self.vector_memories.search(embed_query).limit(n_to_fetch).to_list()
+    #             )
+    #         case "hybrid":
+    #             search_results = (
+    #                 self.vector_memories.search(query_type="hybrid")
+    #                 .vector(embed_query)
+    #                 .text(query)
+    #                 .rerank(self.reranker)
+    #                 .limit(n_to_fetch)
+    #                 .to_list()
+    #             )
+    #         case _:
+    #             raise ValueError(f"Unknown search_method='{search_method}'")
+    #
+    #     return [x["text"] for x in search_results]
+
+    def extract_knowledge_triples(
+        self,
+        source_messages: list[ChatMessage],
+        message_render_style: Literal["plain_text", "json_dumps", "xml"],
+    ) -> list[KnowledgeTriple]:
+        """
+        Extract all facts in `chat_messages` as a list of `KnowledgeTriple`s
+        """
+        prompt_messages: list[ChatMessage] = [
+            ChatMessage(
+                role="user",
+                content=LLM_EXTRACT_KNOWLEDGE_TRIPLES_PROMPT.format(
+                    conversation_snippet=self.chat_messages_to_text(
+                        messages=source_messages,
+                        message_render_style=message_render_style,
+                    )
+                ),
+            )
+        ]
+        logger.debug([msg.model_dump() for msg in prompt_messages])
+        llm_api_response = self.llm_client.chat.completions.create(
+            model=self.llm_name,
+            temperature=self.llm_temperature,
+            messages=[msg.model_dump() for msg in prompt_messages],
+        )
+        logger.debug(
+            {
+                "role": llm_api_response.choices[0].message.role,
+                "content": llm_api_response.choices[0].message.content,
+            }
+        )
+        json_codeblock: str = re.search(
+            r"```json\s*\n(?P<json_content>.*?)\n```",
+            llm_api_response.choices[0].message.content,
+            re.DOTALL,
+        ).group("json_content")
+        triples: list[list[str]] = json.loads(json_codeblock)
+        logger.debug(triples)
+        return []
 
     def chat(self, user_msg: str) -> None:
         """
@@ -243,24 +360,26 @@ nodes in the vector database
                 content=user_msg,
             )
         )
-        relevant_nodes: list["TODO"] = self.fetch_relevant_nodes(
-            # query=self.chat_messages_to_text(
-            #     messages=self.recent_chat_messages,
-            #     output_style=self.message_render_style,
-            # ),
-            # n_to_fetch=self.n_vector_memories_to_fetch,
-            # search_method=self.vector_search_method,
-        )
-        prompt_messages: list[ChatMessage] = (
-            [ChatMessage(role="system", content=self.system_prompt)]
-            # + self.recent_chat_messages
-            + [self.augment_user_msg(user_msg, relevant_memories)]
-        )
+        # relevant_knowledge_tuples: list["TODO"] = self.fetch_relevant_nodes(
+        #     # query=self.chat_messages_to_text(
+        #     #     messages=self.recent_chat_messages,
+        #     #     output_style=self.message_render_style,
+        #     # ),
+        #     # n_to_fetch=self.n_vector_memories_to_fetch,
+        #     # search_method=self.vector_search_method,
+        # )
+        prompt_messages: list[ChatMessage] = [
+            ChatMessage(role="system", content=self.system_prompt),
+            # ChatMessage(role="user", content="TODO"),
+        ]
+        # >>> TEMP DEV (start) <<< #
+        prompt_messages += [msg for msg in self.recent_chat_messages]
+        # >>> TEMP DEV (end) <<< #
         logger.debug([msg.model_dump() for msg in prompt_messages])
         llm_api_response = self.llm_client.chat.completions.create(
             model=self.llm_name,
             temperature=self.llm_temperature,
-            messages=[msg.model_dump() for msg in self.recent_chat_messages],
+            messages=[msg.model_dump() for msg in prompt_messages],
         )
         assistant_response: ChatMessage = ChatMessage(
             role=llm_api_response.choices[0].message.role,
@@ -270,141 +389,43 @@ nodes in the vector database
             assistant_response.model_dump_json(indent=4),
         )
         self.recent_chat_messages.append(assistant_response)
-        self.chat_history.append(
-            ChatMessageDetail(
-                visible_messages=[
-                    ChatMessage(role="user", content=user_msg),
-                    assistant_response,
+
+        proposed_new_rdf_triples: list[KnowledgeTriple] = (
+            self.extract_knowledge_triples(
+                source_messages=list(self.recent_chat_messages)[
+                    -self.triples_source_n_messages :
                 ],
-                all_messages=prompt_messages + [assistant_response],
-                token_usage=llm_api_response.usage.model_dump(),
+                message_render_style=self.message_render_style,
             )
         )
-        if len(self.recent_chat_messages) / 2 > self.n_chat_messages_in_working_memory:
-            messages_to_archive: list[ChatMessage] = self.recent_chat_messages[:2]
-            self.recent_chat_messages = self.recent_chat_messages[2:]
-            match self.vector_memory_type:
-                case "chat_message":
-                    self.add_vector_memory(
-                        self.chat_messages_to_text(
-                            messages=messages_to_archive,
-                            output_style=self.message_render_style,
-                        )
-                    )
-                case "extracted_facts":
-                    facts: list[str] = self.extract_facts_from_chat_snippet(
-                        messages_to_archive
-                    )
-                    for fact in facts:
-                        self.add_vector_memory(fact)
 
-    def augment_user_msg(
-        self,
-        user_message: str,
-        relevant_memories: list[str],
-    ) -> ChatMessage:
-        """
-        Add context (recent chat history and retrieved long-term memories) to user message
-        """
-        return ChatMessage(
-            role="user",
-            content=f"""
-<possibly-relevant-memories>
-{"\n".join(str(num) + ". " + memory for num, memory in enumerate(relevant_memories, start=1))}
-</possibly-relevant-memories>
-
-<recent-chat-history>
-{self.chat_messages_to_text(self.recent_chat_messages[:-1], self.message_render_style)}
-</recent-chat-history>
-
-<user-query>
-{user_message}
-</user-query>
-""".strip(),
-        )
-
-    def extract_facts_from_chat_snippet(
-        self,
-        messages=list[ChatMessage],
-    ) -> list[str]:
-        """
-        Extract facts relevant to the conversation from a subset of a chat
-        """
-        prompt: str = f"""
-<conversation-snippet>
-{self.chat_messages_to_text(messages=messages, output_style=self.message_render_style)}
-</conversation-snippet>
-
-From the given conversation snippet, extract all facts (distinct pieces of knowledge). \
-These facts will be retrieved by the assistant (you) in order to generate informed \
-replies in future conversations with this user.
-
-Return the facts as a list of strings contained within a JSON markdown code block. If there \
-are no facts, return an empty list.
-
-<example-output-format>
-```json
-["fact 1 here", "fact 2 here", ...]
-```
-</example-output-format>
-                """
-        logger.debug(prompt)
-        prompt_messages: list[ChatMessage] = [
-            ChatMessage(role="system", content=self.system_prompt),
-            ChatMessage(
-                role="user",
-                content=prompt,
-            ),
-        ]
-        llm_api_response = self.llm_client.chat.completions.create(
-            model=self.llm_name,
-            temperature=self.llm_temperature,
-            messages=[msg.model_dump() for msg in prompt_messages],
-        )
-        logger.debug(llm_api_response.choices[0].message.content)
-        extracted_facts: list[str] = json.loads(
-            re.search(
-                r"```json\s*\n(?P<facts>.*?)\n```",
-                llm_api_response.choices[0].message.content,
-                re.DOTALL,
-            ).group("facts"),
-        )
-        logger.debug(json.dumps(extracted_facts, indent=4))
-        self.chat_history.append(
-            ChatMessageDetail(
-                visible_messages=[],
-                all_messages=prompt_messages
-                + [
-                    ChatMessage(
-                        role="assistant",
-                        content=llm_api_response.choices[0].message.content,
-                    )
-                ],
-                token_usage=llm_api_response.usage.model_dump(),
-            )
-        )
-        return extracted_facts
-
-    def chat_messages_to_text(
-        self,
-        messages: list[ChatMessage],
-        output_style: Literal["json_dumps", "plain_text"],
-    ) -> str:
-        """
-        Represent sequence of chat-completion messages as a single string
-        """
-        match output_style:
-            case "json_dumps":
-                return json.dumps(
-                    [msg.model_dump() for msg in messages],
-                    indent=4,
-                )
-            case "plain_text":
-                return "\n".join(
-                    [f"{msg.role.upper()}: {msg.content}" for msg in messages]
-                )
-            case _:
-                raise ValueError(f"Unknown output style '{output_style}'")
+        # self.chat_history.append(
+        #     ChatMessageDetail(
+        #         visible_messages=[
+        #             ChatMessage(role="user", content=user_msg),
+        #             assistant_response,
+        #         ],
+        #         all_messages=prompt_messages + [assistant_response],
+        #         token_usage=llm_api_response.usage.model_dump(),
+        #     )
+        # )
+        # if len(self.recent_chat_messages) / 2 > self.n_chat_messages_in_working_memory:
+        #     messages_to_archive: list[ChatMessage] = self.recent_chat_messages[:2]
+        #     self.recent_chat_messages = self.recent_chat_messages[2:]
+        #     match self.vector_memory_type:
+        #         case "chat_message":
+        #             self.add_vector_memory(
+        #                 self.chat_messages_to_text(
+        #                     messages=messages_to_archive,
+        #                     output_style=self.message_render_style,
+        #                 )
+        #             )
+        #         case "extracted_facts":
+        #             facts: list[str] = self.extract_facts_from_chat_snippet(
+        #                 messages_to_archive
+        #             )
+        #             for fact in facts:
+        #                 self.add_vector_memory(fact)
 
     def view_memory_as_json(self) -> dict:
         """
@@ -414,7 +435,7 @@ are no facts, return an empty list.
             "recent_chat_history": [
                 msg.model_dump() for msg in self.recent_chat_messages
             ],
-            "long_term_chat_history": [
-                x["text"] for x in self.vector_memories.search().to_list()
-            ],
+            # "long_term_chat_history": [
+            #     x["text"] for x in self.vector_memories.search().to_list()
+            # ],
         }
