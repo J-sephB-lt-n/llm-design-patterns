@@ -30,22 +30,23 @@ class VectorMemory(MemoryAlg):
         llm_temperature (float): Model temperature (level of model output randomness)
         system_prompt (str): Preliminary instructions given to the language model
         n_chat_messages_in_working_memory (int): Number of most recent chat messages to keep in working 
-                    memory (model prompt).
-                    Messages older than this are embedded and written to the vector database.
-                    In this context, 1 user message + 1 assistant response is considered 1 'message'
+            memory (model prompt).
+            Messages older than this are embedded and written to the vector database.
+            In this context, 1 user message + 1 assistant response is considered 1 'message'
         n_vector_memories_to_fetch (int): In every chat completion, this number of chat messages will be 
-                    fetched from the full chat history (vector database) and included in the model prompt.
+            fetched from the full chat history (vector database) and included in the model prompt.
         vector_search_method (str): Search algorithm used for fetching memories from the vector database
-                    One of ['semantic_dense', 'hybrid']
+            One of ['semantic_dense', 'hybrid']
         vector_memory_type (str): Format used to generate vector memories.
-                    "chat_message" simply stores each chat message directly.
-                    "extracted_facts" uses an LLM to extract facts from each chat message then \
-                    embeds these facts and writes them to the vector database. 
+            "chat_message" simply stores each chat message directly.
+            "extracted_facts" uses an LLM to extract facts from each chat message then \
+            embeds these facts and writes them to the vector database. 
         message_render_style (str): Controls how chat messages are rendered when including them in \
-                                        model prompts.
-                                        One of ['json_dumps', 'plain_text'].
-                                        'plain_text' looks like "USER: ...<br>ASSISTANT: ..."
-                                        'json_dumps' gives standard chat completion messages JSON
+            model prompts.
+            One of ['json_dumps', 'plain_text', 'xml'].
+            'plain_text' looks like "USER: ...<br>ASSISTANT: ...<br> ..."
+            'json_dumps' gives standard chat completion messages JSON
+            'xml' looks like "<user>...</user> <assistant>...</assistant> ..."
     """
 
     def __init__(
@@ -301,7 +302,7 @@ are no facts, return an empty list.
     def chat_messages_to_text(
         self,
         messages: list[ChatMessage],
-        output_style: Literal["json_dumps", "plain_text"],
+        output_style: Literal["json_dumps", "plain_text", "xml"],
     ) -> str:
         """
         Represent sequence of chat-completion messages as a single string
@@ -315,6 +316,10 @@ are no facts, return an empty list.
             case "plain_text":
                 return "\n".join(
                     [f"{msg.role.upper()}: {msg.content}" for msg in messages]
+                )
+            case "xml":
+                return "\n".join(
+                    [f"<{msg.role}>\n{msg.content}\n</{msg.role}>" for msg in messages]
                 )
             case _:
                 raise ValueError(f"Unknown output style '{output_style}'")
