@@ -174,7 +174,7 @@ class VectorMemory(MemoryAlg):
         llm_api_response = self.llm_client.chat.completions.create(
             model=self.llm_name,
             temperature=self.llm_temperature,
-            messages=[msg.model_dump() for msg in self.recent_chat_messages],
+            messages=[msg.model_dump() for msg in prompt_messages],
         )
         assistant_response: ChatMessage = ChatMessage(
             role=llm_api_response.choices[0].message.role,
