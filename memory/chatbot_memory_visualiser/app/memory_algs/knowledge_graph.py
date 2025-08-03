@@ -22,14 +22,11 @@ from loguru import logger
 
 from app.interfaces.memory_alg_protocol import ChatMessage, ChatMessageDetail, MemoryAlg
 
-LLM_SYSTEM_PROMPT: Final[str] = (
-    """
+LLM_SYSTEM_PROMPT: Final[str] = """
 You are a creative assistant who is having a conversation with a user
 """.strip()
-)
 
-LLM_RESPOND_PROMPT: Final[str] = (
-    """
+LLM_RESPOND_PROMPT: Final[str] = """
 <potentially-relevant-information>
 {retrieved_knowledge}
 </potentially-relevant-information>
@@ -46,16 +43,16 @@ By referring to your most recent interaction with the user ("recent chat history
 potentially relevant information retrieved from the long-term chat history (if relevant), \
 respond the latest user message.
 """.strip()
-)
 
-LLM_EXTRACT_KNOWLEDGE_TRIPLES_PROMPT: Final[str] = (
-    """
+LLM_EXTRACT_KNOWLEDGE_TRIPLES_PROMPT: Final[str] = """
 <conversation-snippet>
 {conversation_snippet}
 </conversation-snippet>
 
 From the provided conversation snippet between a user and an assistant, extract all information \
 in the form of a list of fact triples.
+
+Each fact must be associated with one or both of the personas 'user' and/or 'assistant'.
 
 <required-output-format>
 Your response must include a JSON markdown codeblock containing a single list of lists, where \
@@ -67,13 +64,11 @@ each inner list contains exactly 3 strings (subject, predicate, object):
     ...
 ]
 ```
+Do not use camel case.
 </required-output-format>
 """.strip()
-)
 
-LLM_RDF_TRIPLES_DEDUP_PROMPT: Final[
-    str
-] = """
+LLM_RDF_TRIPLES_DEDUP_PROMPT: Final[str] = """
 <proposed-new-knowledge-triples>
 ```json
 {new_rdf_triples}
@@ -229,7 +224,8 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
         """
         text = unicodedata.normalize("NFKD", text)
         text = text.encode("ASCII", "ignore").decode("ASCII")
-        text = re.sub(r"[^a-zA-Z0-9]", "", text)
+        text = re.sub(r"\s+", " ", text)
+        text = re.sub(r"[^a-zA-Z0-9 ]", "", text)
         text = text.lower().strip()
 
         return text
@@ -346,9 +342,16 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
             llm_api_response.choices[0].message.content,
             re.DOTALL,
         ).group("json_content")
-        triples: list[list[str]] = json.loads(json_codeblock)
-        logger.debug(triples)
-        return []
+        raw_triples: list[list[str]] = json.loads(json_codeblock)
+        triples: list[KnowledgeTriple] = [
+            KnowledgeTriple(
+                subj=self.normalise_text(subj),
+                pred=self.normalise_text(pred),
+                obj=self.normalise_text(obj),
+            )
+            for subj, pred, obj in raw_triples
+        ]
+        return triples
 
     def chat(self, user_msg: str) -> None:
         """
@@ -398,6 +401,7 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
                 message_render_style=self.message_render_style,
             )
         )
+        logger.debug(proposed_new_rdf_triples)
 
         # self.chat_history.append(
         #     ChatMessageDetail(

@@ -168,7 +168,7 @@ class VectorMemory(MemoryAlg):
         )
         prompt_messages: list[ChatMessage] = [
             ChatMessage(role="system", content=self.system_prompt),
-            self.augment_user_msg(user_msg, relevant_memories)
+            self.augment_user_msg(user_msg, relevant_memories),
         ]
         logger.debug([msg.model_dump() for msg in prompt_messages])
         llm_api_response = self.llm_client.chat.completions.create(
