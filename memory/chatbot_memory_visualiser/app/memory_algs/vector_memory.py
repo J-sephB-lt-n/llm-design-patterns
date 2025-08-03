@@ -165,11 +165,10 @@ class VectorMemory(MemoryAlg):
             n_to_fetch=self.n_vector_memories_to_fetch,
             search_method=self.vector_search_method,
         )
-        prompt_messages: list[ChatMessage] = (
-            [ChatMessage(role="system", content=self.system_prompt)]
-            # + self.recent_chat_messages
-            + [self.augment_user_msg(user_msg, relevant_memories)]
-        )
+        prompt_messages: list[ChatMessage] = [
+            ChatMessage(role="system", content=self.system_prompt),
+            self.augment_user_msg(user_msg, relevant_memories)
+        ]
         logger.debug([msg.model_dump() for msg in prompt_messages])
         llm_api_response = self.llm_client.chat.completions.create(
             model=self.llm_name,
