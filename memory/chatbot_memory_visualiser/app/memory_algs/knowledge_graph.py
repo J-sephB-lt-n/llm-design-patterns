@@ -14,7 +14,6 @@ from typing import Final, Literal, NamedTuple
 import lancedb
 import model2vec
 import networkx as nx
-import numpy as np
 import openai
 import pyarrow as pa
 from lancedb.rerankers import RRFReranker
@@ -50,7 +49,7 @@ LLM_EXTRACT_KNOWLEDGE_TRIPLES_PROMPT: Final[str] = """
 </conversation-snippet>
 
 From the provided conversation snippet between a user and an assistant, extract all information \
-in the form of a list of fact triples.
+which will be relevant to future interactions, in the form of a list of fact triples.
 
 Each fact must be associated with one or both of the personas 'user' and/or 'assistant'.
 
@@ -64,7 +63,7 @@ each inner list contains exactly 3 strings (subject, predicate, object):
     ...
 ]
 ```
-Do not use camel case.
+Include spaces between words in subject, predicate and object.
 </required-output-format>
 """.strip()
 
@@ -190,8 +189,7 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
         self.vector_search_method = vector_search_method
         self.message_render_style = message_render_style
 
-        self.graph = nx.DiGraph()
-        self.node_counter = itertools.count(start=1)
+        self.graph = nx.MultiDiGraph()
 
         self.embed_model = model2vec.StaticModel.from_pretrained(
             "minishlab/potion-retrieval-32M"
@@ -255,29 +253,36 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
             case _:
                 raise ValueError(f"Unknown output style '{message_render_style}'")
 
-    #     def add_knowledge_triple(
-    #         self,
-    #         subject: str,
-    #         predicate: str,
-    #         object_: str,
-    #     ) -> None:
-    #         """
-    #         Adds knowledge triple into the knowledge graph and subject and predicate as \
-    # nodes in the vector database
-    #         """
-    #         subject = self.normalise_text(subject)
-    #         predicate = self.normalise_text(predicate)
-    #         object_ = self.normalise_text(object_)
-    #
-    #         self.node_embeddings.add(
-    #             [
-    #                 {
-    #                     "text": "TODO",
-    #                     "node_id": "TODO",
-    #                     "vector": self.embed_model.encode("TODO"),
-    #                 }
-    #             ]
-    #         )
+    def add_knowledge_triple(self, new_triple: KnowledgeTriple) -> None:
+        """
+        Adds knowledge triple into the knowledge graph and subject and predicate as \
+nodes in the vector database
+        """
+        subj = new_triple.subj
+        pred = new_triple.pred
+        obj = new_triple.obj
+        for node_id in (subj, obj):
+            if node_id not in self.graph:
+                self.graph.add_node(node_id)
+        if self.graph.has_edge(subj, obj, key=pred):
+            self.graph[subj][obj][pred]["weight"] += 1
+        else:
+            self.graph.add_edge(
+                subj,
+                obj,
+                key=pred,
+                weight=1,
+            )
+
+        # self.node_embeddings.add(
+        #     [
+        #         {
+        #             "text": "TODO",
+        #             "node_id": "TODO",
+        #             "vector": self.embed_model.encode("TODO"),
+        #         }
+        #     ]
+        # )
 
     # def fetch_relevant_knowledge_triples(
     #     self,
@@ -353,6 +358,14 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
         ]
         return triples
 
+    def dedup_knowledge_triples(
+        self, new_triples: list[KnowledgeTriple]
+    ) -> list[KnowledgeTriple]:
+        """
+        Remove `new_triples` with knowledge already in the knowledge base
+        """
+        return new_triples
+
     def chat(self, user_msg: str) -> None:
         """
         Process a new user message, update memory and chat history
@@ -401,7 +414,14 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
                 message_render_style=self.message_render_style,
             )
         )
-        logger.debug(proposed_new_rdf_triples)
+        logger.debug(f"proposed new knowledge triples: {proposed_new_rdf_triples}")
+
+        triples_to_add: list[KnowledgeTriple] = self.dedup_knowledge_triples(
+            proposed_new_rdf_triples
+        )
+
+        for triple_to_add in triples_to_add:
+            self.add_knowledge_triple(triple_to_add)
 
         # self.chat_history.append(
         #     ChatMessageDetail(
@@ -438,6 +458,13 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
         return {
             "recent_chat_history": [
                 msg.model_dump() for msg in self.recent_chat_messages
+            ],
+            "knowledge_triples": [
+                (u, k, v, d)
+                for u, v, k, d in self.graph.edges(
+                    keys=True,
+                    data=True,
+                )
             ],
             # "long_term_chat_history": [
             #     x["text"] for x in self.vector_memories.search().to_list()
