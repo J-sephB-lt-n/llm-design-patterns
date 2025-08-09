@@ -3,7 +3,6 @@ Memory algorithm which stores the few most recent chat messages and the full cha
 in a vector database
 """
 
-import itertools
 import json
 import re
 import unicodedata
@@ -14,6 +13,7 @@ from typing import Final, Literal, NamedTuple
 import lancedb
 import model2vec
 import networkx as nx
+import numpy as np
 import openai
 import pyarrow as pa
 from lancedb.rerankers import RRFReranker
@@ -21,11 +21,14 @@ from loguru import logger
 
 from app.interfaces.memory_alg_protocol import ChatMessage, ChatMessageDetail, MemoryAlg
 
-LLM_SYSTEM_PROMPT: Final[str] = """
+LLM_SYSTEM_PROMPT: Final[str] = (
+    """
 You are a creative assistant who is having a conversation with a user
 """.strip()
+)
 
-LLM_RESPOND_PROMPT: Final[str] = """
+LLM_RESPOND_PROMPT: Final[str] = (
+    """
 <potentially-relevant-information>
 {retrieved_knowledge}
 </potentially-relevant-information>
@@ -42,8 +45,10 @@ By referring to your most recent interaction with the user ("recent chat history
 potentially relevant information retrieved from the long-term chat history (if relevant), \
 respond the latest user message.
 """.strip()
+)
 
-LLM_EXTRACT_KNOWLEDGE_TRIPLES_PROMPT: Final[str] = """
+LLM_EXTRACT_KNOWLEDGE_TRIPLES_PROMPT: Final[str] = (
+    """
 <conversation-snippet>
 {conversation_snippet}
 </conversation-snippet>
@@ -66,8 +71,11 @@ each inner list contains exactly 3 strings (subject, predicate, object):
 Include spaces between words in subject, predicate and object.
 </required-output-format>
 """.strip()
+)
 
-LLM_RDF_TRIPLES_DEDUP_PROMPT: Final[str] = """
+LLM_RDF_TRIPLES_DEDUP_PROMPT: Final[
+    str
+] = """
 <proposed-new-knowledge-triples>
 ```json
 {new_rdf_triples}
@@ -197,11 +205,14 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
 
         # set up temporary vector database on filesystem #
         self.vector_db = lancedb.connect(Path("temp_files/graph_memory_nodes_db"))
-        self.node_embeddings = self.vector_db.create_table(
+        self.knowledge_triple_embeddings = self.vector_db.create_table(
             name="graph_nodes",
             schema=pa.schema(
                 [
                     pa.field("text", pa.string()),
+                    pa.field("subject", pa.string()),
+                    pa.field("predicate", pa.string()),
+                    pa.field("object", pa.string()),
                     pa.field(
                         "vector",
                         pa.list_(
@@ -213,20 +224,20 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
             ),
         )
         if self.vector_search_method == "hybrid":
-            self.node_embeddings.create_fts_index("text")
+            self.knowledge_triple_embeddings.create_fts_index("text")
             self.reranker = RRFReranker()
 
-    def normalise_text(self, text: str) -> str:
-        """
-        Simplifies text as far as possible, including diacritic removal
-        """
-        text = unicodedata.normalize("NFKD", text)
-        text = text.encode("ASCII", "ignore").decode("ASCII")
-        text = re.sub(r"\s+", " ", text)
-        text = re.sub(r"[^a-zA-Z0-9 ]", "", text)
-        text = text.lower().strip()
-
-        return text
+    # def normalise_text(self, text: str) -> str:
+    #     """
+    #     Simplifies text as far as possible, including diacritic removal
+    #     """
+    #     text = unicodedata.normalize("NFKD", text)
+    #     text = text.encode("ASCII", "ignore").decode("ASCII")
+    #     text = re.sub(r"\s+", " ", text)
+    #     text = re.sub(r"[^a-zA-Z0-9 ]", "", text)
+    #     text = text.lower().strip()
+    #
+    #     return text
 
     def chat_messages_to_text(
         self,
@@ -274,42 +285,49 @@ nodes in the vector database
                 weight=1,
             )
 
-        # self.node_embeddings.add(
-        #     [
-        #         {
-        #             "text": "TODO",
-        #             "node_id": "TODO",
-        #             "vector": self.embed_model.encode("TODO"),
-        #         }
-        #     ]
-        # )
+        self.knowledge_triple_embeddings.add(
+            [
+                {
+                    "text": f"{subj} {pred} {obj}",
+                    "subject": subj,
+                    "predicate": pred,
+                    "object": obj,
+                    "vector": self.embed_model.encode(f"{subj} {pred} {obj}"),
+                }
+            ]
+        )
 
-    # def fetch_relevant_knowledge_triples(
-    #     self,
-    #     query: str,
-    # ) -> list[KnowledgeTriple]:
-    #     """
-    #     Fetch existing semantic triples closest to `query`
-    #     """
-    #     embed_query: np.ndarray = self.embed_model.encode(query)
-    #     match search_method:
-    #         case "semantic_dense":
-    #             search_results = (
-    #                 self.vector_memories.search(embed_query).limit(n_to_fetch).to_list()
-    #             )
-    #         case "hybrid":
-    #             search_results = (
-    #                 self.vector_memories.search(query_type="hybrid")
-    #                 .vector(embed_query)
-    #                 .text(query)
-    #                 .rerank(self.reranker)
-    #                 .limit(n_to_fetch)
-    #                 .to_list()
-    #             )
-    #         case _:
-    #             raise ValueError(f"Unknown search_method='{search_method}'")
-    #
-    #     return [x["text"] for x in search_results]
+    def fetch_relevant_knowledge_triples(
+        self,
+        query: str,
+        search_method: Literal["semantic_dense", "hybrid"],
+        n_to_fetch: int,
+    ) -> list[KnowledgeTriple]:
+        """
+        Fetch `n_to_fetch` existing semantic triples closest to `query` using `search_method`
+        """
+        embed_query: np.ndarray = self.embed_model.encode(query)
+        match search_method:
+            case "semantic_dense":
+                search_results = (
+                    self.knowledge_triple_embeddings.search(embed_query)
+                    .limit(n_to_fetch)
+                    .to_list()
+                )
+            case "hybrid":
+                search_results = (
+                    self.knowledge_triple_embeddings.search(query_type="hybrid")
+                    .vector(embed_query)
+                    .text(query)
+                    .rerank(self.reranker)
+                    .limit(n_to_fetch)
+                    .to_list()
+                )
+
+        return [
+            KnowledgeTriple(subj=x["subj"], pred=x["pred"], obj=x["obj"])
+            for x in search_results
+        ]
 
     def extract_knowledge_triples(
         self,
@@ -350,9 +368,9 @@ nodes in the vector database
         raw_triples: list[list[str]] = json.loads(json_codeblock)
         triples: list[KnowledgeTriple] = [
             KnowledgeTriple(
-                subj=self.normalise_text(subj),
-                pred=self.normalise_text(pred),
-                obj=self.normalise_text(obj),
+                subj=subj.strip(),  # self.normalise_text(subj),
+                pred=pred.strip(),  # self.normalise_text(pred),
+                obj=obj.strip(),  # self.normalise_text(obj),
             )
             for subj, pred, obj in raw_triples
         ]
@@ -376,7 +394,7 @@ nodes in the vector database
                 content=user_msg,
             )
         )
-        # relevant_knowledge_tuples: list["TODO"] = self.fetch_relevant_nodes(
+        # relevant_knowledge_triples: list["TODO"] = self.fetch_relevant_knowledge_triples(
         #     # query=self.chat_messages_to_text(
         #     #     messages=self.recent_chat_messages,
         #     #     output_style=self.message_render_style,
@@ -466,7 +484,5 @@ nodes in the vector database
                     data=True,
                 )
             ],
-            # "long_term_chat_history": [
-            #     x["text"] for x in self.vector_memories.search().to_list()
-            # ],
+            "vectors": [x for x in self.knowledge_triple_embeddings.search().to_list()],
         }
