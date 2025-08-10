@@ -20,34 +20,29 @@ from loguru import logger
 
 from app.interfaces.memory_alg_protocol import ChatMessage, ChatMessageDetail, MemoryAlg
 
-LLM_SYSTEM_PROMPT: Final[str] = (
-    """
+LLM_SYSTEM_PROMPT: Final[str] = """
 You are a creative assistant who is having a conversation with a user
 """.strip()
-)
 
-LLM_RESPOND_PROMPT: Final[str] = (
-    """
-<potentially-relevant-information>
-{retrieved_knowledge}
-</potentially-relevant-information>
+LLM_RESPOND_PROMPT: Final[str] = """
+<long-term-chat-history>
+{long_term_chat_history}
+</long-term-chat-history>
 
 <recent-chat-history>
 {recent_chat_history}
 </recent-chat-history>
 
-<latest-user-message>
-{latest_use_message}
-</user-user-message>
+<current-user-message>
+{current_user_message}
+</current-user-message>
 
-By referring to your most recent interaction with the user ("recent chat history") and the \
-potentially relevant information retrieved from the long-term chat history (if relevant), \
-respond the latest user message.
+By referring to your most recent interactions with the user ("recent chat history") and \
+(if relevant) the retrieved memories from long-term chat history (given as knowledge \
+triples), respond to the current user message.
 """.strip()
-)
 
-LLM_EXTRACT_KNOWLEDGE_TRIPLES_PROMPT: Final[str] = (
-    """
+LLM_EXTRACT_KNOWLEDGE_TRIPLES_PROMPT: Final[str] = """
 <conversation-snippet>
 {conversation_snippet}
 </conversation-snippet>
@@ -70,11 +65,8 @@ each inner list contains exactly 3 strings (subject, predicate, object):
 Include spaces between words in subject, predicate and object.
 </required-output-format>
 """.strip()
-)
 
-LLM_RDF_TRIPLES_DEDUP_PROMPT: Final[
-    str
-] = """
+LLM_RDF_TRIPLES_DEDUP_PROMPT: Final[str] = """
 <proposed-new-knowledge-triples>
 ```json
 {new_rdf_triples}
@@ -146,9 +138,9 @@ directly in the prompt
         triples_source_n_messages (int): Number of most recent chat messages to use to extract \
 knowledge triples
         n_context_triples (int): Number of initial triples fetched from the knowledge graph \
-when adding knowledge context to the prompt
+to add as context to the prompt
         context_n_messages (int): Number of most recent chat messages to use as query when \
-fetching the most relevant nodes from the graph 
+fetching the most relevant knowledge triples from the graph 
         n_context_hops (int): Number of steps to take when traversing the graph to find \
 possibly related knowledge, outward from the first `n_context_nodes` nodes found.
         vector_search_method (str): Approach used for fetching nodes from the vector database
@@ -169,8 +161,8 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
         system_prompt: str = LLM_SYSTEM_PROMPT,
         recent_chat_history_n_messages: int = 10,
         triples_source_n_messages: int = 4,
-        n_context_nodes: int = 3,
-        context_n_messages: int = 6,
+        n_context_triples: int = 6,
+        context_n_messages: int = 10,
         n_context_hops: int = 1,
         vector_search_method: Literal["semantic_dense", "hybrid"] = "hybrid",
         message_render_style: Literal["plain_text", "json_dumps", "xml"] = "plain_text",
@@ -191,7 +183,7 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
         self.system_prompt = system_prompt
         self.recent_chat_history_n_messages = recent_chat_history_n_messages
         self.triples_source_n_messages = triples_source_n_messages
-        self.n_context_nodes = n_context_nodes
+        self.n_context_triples = n_context_triples
         self.context_n_messages = context_n_messages
         self.n_context_hops = n_context_hops
         self.vector_search_method = vector_search_method
@@ -379,7 +371,22 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
         """
         Remove `new_triples` with knowledge already in the knowledge base
         """
+        logger.warning("dedup_knowledge_triples() not implemented yet")
+
         return new_triples
+
+    def expand_graph_neighbourhood(
+        self,
+        start_triples: list[KnowledgeTriple],
+        n_hops: int,
+    ) -> list[KnowledgeTriple]:
+        """
+        Traverse the knowledge graph outward from the nodes in `start_triples` by n_hops` steps \
+and return all unique knowledge triples (including `start_triples`) discovered along the way
+        """
+        logger.warning("expand_graph_neighbourhood() not implemented yet")
+
+        return start_triples
 
     def chat(self, user_msg: str) -> None:
         """
@@ -391,21 +398,46 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
                 content=user_msg,
             )
         )
-        # relevant_knowledge_triples: list["TODO"] = self.fetch_relevant_knowledge_triples(
-        #     # query=self.chat_messages_to_text(
-        #     #     messages=self.recent_chat_messages,
-        #     #     output_style=self.message_render_style,
-        #     # ),
-        #     # n_to_fetch=self.n_vector_memories_to_fetch,
-        #     # search_method=self.vector_search_method,
-        # )
+        initial_relevant_knowledge_triples: list[KnowledgeTriple] = (
+            self.fetch_relevant_knowledge_triples(
+                query=self.chat_messages_to_text(
+                    messages=self.recent_chat_messages[-self.n_context_triples :],
+                    message_render_style=self.message_render_style,
+                ),
+                n_to_fetch=self.n_context_triples,
+                search_method=self.vector_search_method,
+            )
+        )
+        logger.debug("Initial relevant triples: %s", initial_relevant_knowledge_triples)
+        relevant_knowledge_triples: list[KnowledgeTriple] = (
+            self.expand_graph_neighbourhood(
+                start_triples=initial_relevant_knowledge_triples,
+                n_hops=self.n_context_hops,
+            )
+        )
+        logger.debug("Expanded relevant triples: %s", relevant_knowledge_triples)
         prompt_messages: list[ChatMessage] = [
             ChatMessage(role="system", content=self.system_prompt),
-            # ChatMessage(role="user", content="TODO"),
+            ChatMessage(
+                role="user",
+                content=LLM_RESPOND_PROMPT.format(
+                    long_term_chat_history="",
+                    recent_chat_history=self.chat_messages_to_text(
+                        messages=list(self.recent_chat_messages)[:-1],
+                        message_render_style=self.message_render_style,
+                    ),
+                    current_user_message=self.chat_messages_to_text(
+                        messages=[
+                            ChatMessage(
+                                role="user",
+                                content=user_msg,
+                            )
+                        ],
+                        message_render_style=self.message_render_style,
+                    ),
+                ),
+            ),
         ]
-        # >>> TEMP DEV (start) <<< #
-        prompt_messages += [msg for msg in self.recent_chat_messages]
-        # >>> TEMP DEV (end) <<< #
         logger.debug([msg.model_dump() for msg in prompt_messages])
         llm_api_response = self.llm_client.chat.completions.create(
             model=self.llm_name,
@@ -420,6 +452,16 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
             assistant_response.model_dump_json(indent=4),
         )
         self.recent_chat_messages.append(assistant_response)
+        self.chat_history.append(
+            ChatMessageDetail(
+                visible_messages=[
+                    ChatMessage(role="user", content=user_msg),
+                    assistant_response,
+                ],
+                all_messages=prompt_messages,
+                token_usage=llm_api_response.usage.model_dump(),
+            )
+        )
 
         proposed_new_rdf_triples: list[KnowledgeTriple] = (
             self.extract_knowledge_triples(
@@ -437,34 +479,6 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
 
         for triple_to_add in triples_to_add:
             self.add_knowledge_triple(triple_to_add)
-
-        # self.chat_history.append(
-        #     ChatMessageDetail(
-        #         visible_messages=[
-        #             ChatMessage(role="user", content=user_msg),
-        #             assistant_response,
-        #         ],
-        #         all_messages=prompt_messages + [assistant_response],
-        #         token_usage=llm_api_response.usage.model_dump(),
-        #     )
-        # )
-        # if len(self.recent_chat_messages) / 2 > self.n_chat_messages_in_working_memory:
-        #     messages_to_archive: list[ChatMessage] = self.recent_chat_messages[:2]
-        #     self.recent_chat_messages = self.recent_chat_messages[2:]
-        #     match self.vector_memory_type:
-        #         case "chat_message":
-        #             self.add_vector_memory(
-        #                 self.chat_messages_to_text(
-        #                     messages=messages_to_archive,
-        #                     output_style=self.message_render_style,
-        #                 )
-        #             )
-        #         case "extracted_facts":
-        #             facts: list[str] = self.extract_facts_from_chat_snippet(
-        #                 messages_to_archive
-        #             )
-        #             for fact in facts:
-        #                 self.add_vector_memory(fact)
 
     def view_memory_as_json(self) -> dict:
         """
