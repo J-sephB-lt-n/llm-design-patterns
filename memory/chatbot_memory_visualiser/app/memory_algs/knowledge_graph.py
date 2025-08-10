@@ -5,7 +5,6 @@ in a vector database
 
 import json
 import re
-import unicodedata
 from collections import deque
 from pathlib import Path
 from typing import Final, Literal, NamedTuple
@@ -122,31 +121,32 @@ class KnowledgeGraphMemory(MemoryAlg):
     More specifically, the algorithm works as follows:
         - At each new user message in the chat, a LLM is used to extract semantic (RDF) triples \
 from the last `triples_source_n_msgs` chat messages in the conversation
-        - The subject, predicate and object text content are cleaned, to prevent duplication \
-in the graph (strip, lowercase etc.)
         - These new triples are deduped against the existing knowledge triples already in the \
 graph using a LLM to make the decisions
         - Triples which are new (i.e. not duplicates) are added to the graph - the subject and \
 object as nodes and the predicate as an edge.
-        - The content of the new nodes (subject and object) is embedded and added into a vector \
-database (for later lookup)
+        - The new triples are embedded and added into a vector database (for later lookup)
         - Each new user chat message is processed as follows:
             - The last `recent_chat_history_n_messages` (including the new user message) are \
               included in the prompt
-            - The nearest `n_context_nodes` nodes whose content is most similar to the combined \
-content of the last `context_n_messages` most recent chat messages are retrieved.
-            - For each of these retrieved nodes, the graph is traversed by `n_context_hops` \
-steps, and all of the knowledge triples explored this way are included as context in the prompt.
+            - The nearest `n_context_triples` embedded triples whose content is most similar \
+              to the combined content of the last `context_n_messages` most recent chat \
+              messages are retrieved.
+            - For each of these retrieved triples, the graph is traversed by `n_context_hops` \
+steps outward from the subject and object nodes of that triple, and all of the knowledge \
+triples explored in this way are included as context in the prompt.
 
     Attributes:
         llm_client (openai.OpenAI): Model API client
         llm_name (str): Model name (model identifier in model API)
         llm_temperature (float): Model temperature (level of model output randomness)
         system_prompt (str): Preliminary instructions given to the language model
+        recent_chat_history_n_messages (int): Number of most recent chat messages to include \
+directly in the prompt
         triples_source_n_messages (int): Number of most recent chat messages to use to extract \
 knowledge triples
-        n_context_nodes (int): Number of initial nodes fetched from the knowledge graph when \
-adding knowledge context to the prompt
+        n_context_triples (int): Number of initial triples fetched from the knowledge graph \
+when adding knowledge context to the prompt
         context_n_messages (int): Number of most recent chat messages to use as query when \
 fetching the most relevant nodes from the graph 
         n_context_hops (int): Number of steps to take when traversing the graph to find \
@@ -261,13 +261,10 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
                 return "\n".join(
                     [f"<{msg.role}>\n{msg.content}\n</{msg.role}>" for msg in messages]
                 )
-            case _:
-                raise ValueError(f"Unknown output style '{message_render_style}'")
 
     def add_knowledge_triple(self, new_triple: KnowledgeTriple) -> None:
         """
-        Adds knowledge triple into the knowledge graph and subject and predicate as \
-nodes in the vector database
+        Add new knowledge triple into the knowledge graph and vector database
         """
         subj = new_triple.subj
         pred = new_triple.pred
