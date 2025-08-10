@@ -5,9 +5,7 @@ Entrypoint of the streamlit app
 import atexit
 import functools
 import inspect
-import shutil
 from collections.abc import Callable
-from pathlib import Path
 from typing import Final, get_args, get_origin, Literal
 
 import httpx
@@ -15,6 +13,7 @@ import openai
 import streamlit as st
 from loguru import logger
 
+from app.lifecycle.teardown import app_cleanup
 from app.interfaces.memory_alg_protocol import ChatMessageDetail, MemoryAlg
 from app.memory_algs import memory_algs
 
@@ -289,21 +288,6 @@ def memory_page():
     st.markdown(f"The current algorithm is [{st.session_state.memory_alg_name}]")
     st.markdown("The current state of the algorithm's memory is:")
     st.json(st.session_state.memory_alg.view_memory_as_json())
-
-
-def app_cleanup():
-    """
-    This code is run at app exit. It deletes all files and folders in /temp_files/
-    """
-    logger.info("Deleting temporary app files")
-    for item in Path("./temp_files").iterdir():
-        if item.name == ".gitkeep":
-            continue
-        if item.is_file() or item.is_symlink():
-            item.unlink()
-        elif item.is_dir():
-            shutil.rmtree(item)
-    logger.info("Finished deleting temporary app files")
 
 
 def main():

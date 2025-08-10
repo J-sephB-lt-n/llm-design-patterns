@@ -18,13 +18,17 @@ import pyarrow as pa
 from lancedb.rerankers import RRFReranker
 from loguru import logger
 
+from app.lifecycle.teardown import app_cleanup
 from app.interfaces.memory_alg_protocol import ChatMessage, ChatMessageDetail, MemoryAlg
 
-LLM_SYSTEM_PROMPT: Final[str] = """
+LLM_SYSTEM_PROMPT: Final[str] = (
+    """
 You are a creative assistant who is having a conversation with a user
 """.strip()
+)
 
-LLM_RESPOND_PROMPT: Final[str] = """
+LLM_RESPOND_PROMPT: Final[str] = (
+    """
 <long-term-chat-history>
 {long_term_chat_history}
 </long-term-chat-history>
@@ -41,8 +45,10 @@ By referring to your most recent interactions with the user ("recent chat histor
 (if relevant) the retrieved memories from long-term chat history (given as knowledge \
 triples), respond to the current user message.
 """.strip()
+)
 
-LLM_EXTRACT_KNOWLEDGE_TRIPLES_PROMPT: Final[str] = """
+LLM_EXTRACT_KNOWLEDGE_TRIPLES_PROMPT: Final[str] = (
+    """
 <conversation-snippet>
 {conversation_snippet}
 </conversation-snippet>
@@ -65,8 +71,11 @@ each inner list contains exactly 3 strings (subject, predicate, object):
 Include spaces between words in subject, predicate and object.
 </required-output-format>
 """.strip()
+)
 
-LLM_RDF_TRIPLES_DEDUP_PROMPT: Final[str] = """
+LLM_RDF_TRIPLES_DEDUP_PROMPT: Final[
+    str
+] = """
 <proposed-new-knowledge-triples>
 ```json
 {new_rdf_triples}
@@ -167,6 +176,9 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
         vector_search_method: Literal["semantic_dense", "hybrid"] = "hybrid",
         message_render_style: Literal["plain_text", "json_dumps", "xml"] = "plain_text",
     ) -> None:
+        # delete any temporary files created by previous alg #
+        app_cleanup()
+
         if recent_chat_history_n_messages < context_n_messages:
             raise ValueError(
                 "`context_n_messages` cannot exceed number of messages in recent chat "
@@ -401,7 +413,7 @@ and return all unique knowledge triples (including `start_triples`) discovered a
         initial_relevant_knowledge_triples: list[KnowledgeTriple] = (
             self.fetch_relevant_knowledge_triples(
                 query=self.chat_messages_to_text(
-                    messages=self.recent_chat_messages[-self.n_context_triples :],
+                    messages=list(self.recent_chat_messages)[-self.n_context_triples :],
                     message_render_style=self.message_render_style,
                 ),
                 n_to_fetch=self.n_context_triples,

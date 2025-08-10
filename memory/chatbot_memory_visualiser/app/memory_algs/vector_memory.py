@@ -17,6 +17,7 @@ from lancedb.rerankers import RRFReranker
 from loguru import logger
 
 from app.interfaces.memory_alg_protocol import ChatMessage, ChatMessageDetail, MemoryAlg
+from app.lifecycle.teardown import app_cleanup
 
 
 class VectorMemory(MemoryAlg):
@@ -63,6 +64,9 @@ class VectorMemory(MemoryAlg):
         ] = "extracted_facts",
         message_render_style: Literal["plain_text", "json_dumps"] = "plain_text",
     ) -> None:
+        # delete any temporary files created by previous alg #
+        app_cleanup()
+
         self.chat_history: list[ChatMessageDetail] = []
         self.recent_chat_messages: list[ChatMessage] = []
         self.llm_client = llm_client
