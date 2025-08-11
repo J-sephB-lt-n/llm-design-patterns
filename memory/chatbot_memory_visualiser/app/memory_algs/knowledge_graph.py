@@ -39,8 +39,8 @@ LLM_RESPOND_PROMPT: Final[str] = """
 </current-user-message>
 
 By referring to your most recent interactions with the user ("recent chat history") and \
-(if relevant) the retrieved memories from long-term chat history (given as knowledge \
-triples), respond to the current user message.
+the retrieved memories from long-term chat history represented as knowledge triples (if \
+they are relevant), respond to the current user message.
 """.strip()
 
 LLM_EXTRACT_KNOWLEDGE_TRIPLES_PROMPT: Final[str] = """
@@ -59,7 +59,6 @@ each inner list contains exactly 3 strings (subject, predicate, object):
 ```json
 [
     ["subject", "predicate", "object"],
-    [...],
     ...
 ]
 ```
@@ -74,18 +73,23 @@ LLM_RDF_TRIPLES_DEDUP_PROMPT: Final[str] = """
 ```
 </proposed-new-knowledge-triples>
 
+<existing-triples>
+{existing_triples}
+</existing-triples>
+
 You have been provided with a list of new knowledge (RDF) triples proposed to be added to \
-the existing knowledge database. For each proposed new triple, the closest {n_closest_triples} \
-existing knowledge triples in the database are shown.
+the existing knowledge database, as well as the most similar existing knowledge triples \
+already in the database.
 
 Your task is as follows:
 
-1. Decide which of the proposed new triples should be added to the database - return just the \
+1. Return the list of new triples which should be added to the database - return just the \
 list of triples to add. Omit triples whose knowledge content is already in the database (i.e. \
 omit those that do not add any new information).
 2. If one of the new proposed triples contains a formatting inconsistency with one of the \
 triples in the existing knowledge database (e.g. the same subject/object is referenced but \
-with a difference in punctuation or case), then correct it in your list of triples to add.
+with a difference in punctuation or case), then format the new triple so that it is \
+consistent with the existing triples.
 
 <required-output-format>
 Your response must include a JSON markdown codeblock containing a single list of lists, where \
@@ -93,7 +97,6 @@ each inner list contains exactly 3 strings (subject, predicate, object):
 ```json
 [
     ["subject", "predicate", "object"],
-    [...],
     ...
 ]
 ```
@@ -144,6 +147,8 @@ to add as context to the prompt
 fetching the most relevant knowledge triples from the graph 
         n_context_hops (int): Number of steps to take when traversing the graph to find \
 possibly related knowledge, outward from the first `n_context_nodes` nodes found.
+        dedup_n_comparison_triples (int): Number of most similar triples to fetch (per \
+newly proposed triple) in order to check for duplicated knowledge.
         vector_search_method (str): Approach used for fetching nodes from the vector database
             One of ['semantic_dense', 'hybrid']
         message_render_style (str): Controls how chat messages are rendered when including them in \
@@ -165,6 +170,7 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
         n_context_triples: int = 6,
         context_n_messages: int = 10,
         n_context_hops: int = 1,
+        dedup_n_comparison_triples: int = 20,
         vector_search_method: Literal["semantic_dense", "hybrid"] = "hybrid",
         message_render_style: Literal["plain_text", "json_dumps", "xml"] = "plain_text",
     ) -> None:
@@ -190,6 +196,7 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
         self.n_context_triples = n_context_triples
         self.context_n_messages = context_n_messages
         self.n_context_hops = n_context_hops
+        self.dedup_n_comparison_triples = dedup_n_comparison_triples
         self.vector_search_method = vector_search_method
         self.message_render_style = message_render_style
 
@@ -222,18 +229,6 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
         if self.vector_search_method == "hybrid":
             self.knowledge_triple_embeddings.create_fts_index("text")
             self.reranker = RRFReranker()
-
-    # def normalise_text(self, text: str) -> str:
-    #     """
-    #     Simplifies text as far as possible, including diacritic removal
-    #     """
-    #     text = unicodedata.normalize("NFKD", text)
-    #     text = text.encode("ASCII", "ignore").decode("ASCII")
-    #     text = re.sub(r"\s+", " ", text)
-    #     text = re.sub(r"[^a-zA-Z0-9 ]", "", text)
-    #     text = text.lower().strip()
-    #
-    #     return text
 
     def chat_messages_to_text(
         self,
@@ -344,21 +339,25 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
                 ),
             )
         ]
-        logger.debug([msg.model_dump() for msg in prompt_messages])
         llm_api_response = self.llm_client.chat.completions.create(
             model=self.llm_name,
             temperature=self.llm_temperature,
             messages=[msg.model_dump() for msg in prompt_messages],
         )
-        logger.debug(
-            {
-                "role": llm_api_response.choices[0].message.role,
-                "content": llm_api_response.choices[0].message.content,
-            }
+        assistant_response: ChatMessage = ChatMessage(
+            role=llm_api_response.choices[0].message.role,
+            content=llm_api_response.choices[0].message.content,
+        )
+        self.chat_history.append(
+            ChatMessageDetail(
+                visible_messages=[],
+                all_messages=[*prompt_messages, assistant_response],
+                token_usage=llm_api_response.usage.model_dump(),
+            )
         )
         json_codeblock: str = re.search(
             r"```json\s*\n(?P<json_content>.*?)\n```",
-            llm_api_response.choices[0].message.content,
+            assistant_response.content,
             re.DOTALL,
         ).group("json_content")
         raw_triples: list[list[str]] = json.loads(json_codeblock)
@@ -378,9 +377,61 @@ possibly related knowledge, outward from the first `n_context_nodes` nodes found
         """
         Remove `new_triples` with knowledge already in the knowledge base
         """
-        logger.warning("dedup_knowledge_triples() not implemented yet")
-
-        return new_triples
+        existing_triples: set[KnowledgeTriple] = set()
+        for new_triple in new_triples:
+            for similar_triple in self.fetch_relevant_knowledge_triples(
+                query=" ".join(new_triple),
+                n_to_fetch=self.dedup_n_comparison_triples,
+                search_method=self.vector_search_method,
+            ):
+                existing_triples.add(similar_triple)
+        prompt_messages: list[ChatMessage] = [
+            ChatMessage(
+                role="user",
+                content=LLM_RDF_TRIPLES_DEDUP_PROMPT.format(
+                    new_rdf_triples="\n".join(
+                        str(list(triple)) for triple in new_triples
+                    ),
+                    existing_triples="\n".join(
+                        str(list(triple)) for triple in existing_triples
+                    ),
+                ),
+            )
+        ]
+        llm_api_response = self.llm_client.chat.completions.create(
+            model=self.llm_name,
+            temperature=self.llm_temperature,
+            messages=[msg.model_dump() for msg in prompt_messages],
+        )
+        assistant_response: ChatMessage = ChatMessage(
+            role=llm_api_response.choices[0].message.role,
+            content=llm_api_response.choices[0].message.content,
+        )
+        self.chat_history.append(
+            ChatMessageDetail(
+                visible_messages=[],
+                all_messages=[
+                    *prompt_messages,
+                    assistant_response,
+                ],
+                token_usage=llm_api_response.usage.model_dump(),
+            )
+        )
+        json_codeblock: str = re.search(
+            r"```json\s*\n(?P<json_content>.*?)\n```",
+            assistant_response.content,
+            re.DOTALL,
+        ).group("json_content")
+        raw_triples: list[list[str]] = json.loads(json_codeblock)
+        deduped_triples: list[KnowledgeTriple] = [
+            KnowledgeTriple(
+                subj=subj.strip(),  # self.normalise_text(subj),
+                pred=pred.strip(),  # self.normalise_text(pred),
+                obj=obj.strip(),  # self.normalise_text(obj),
+            )
+            for subj, pred, obj in raw_triples
+        ]
+        return deduped_triples
 
     def expand_graph_neighbourhood(
         self,
@@ -428,7 +479,9 @@ and return all unique knowledge triples (including `start_triples`) discovered a
             ChatMessage(
                 role="user",
                 content=LLM_RESPOND_PROMPT.format(
-                    long_term_chat_history="",
+                    long_term_chat_history="\n".join(
+                        str(list(triple)) for triple in relevant_knowledge_triples
+                    ),
                     recent_chat_history=self.chat_messages_to_text(
                         messages=list(self.recent_chat_messages)[:-1],
                         message_render_style=self.message_render_style,
