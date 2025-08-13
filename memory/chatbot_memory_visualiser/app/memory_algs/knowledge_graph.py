@@ -180,7 +180,7 @@ newly proposed triple) in order to check for duplicated knowledge.
         recent_chat_history_n_messages: int = 10,
         triples_source_n_messages: int = 4,
         n_context_triples: int = 6,
-        context_n_messages: int = 10,
+        context_n_messages: int = 2,
         n_context_hops: int = 1,
         dedup_n_comparison_triples: int = 20,
         vector_search_method: Literal["semantic_dense", "hybrid"] = "hybrid",
@@ -325,7 +325,12 @@ newly proposed triple) in order to check for duplicated knowledge.
                 )
 
         logger.debug(
-            f"Fetched relevant knowledge triples: {[x['text'] for x in search_results]}",
+            f"""
+            Fetched relevant knowledge triples: 
+Query: "{query}"
+Results:
+{"\n".join("\t"+x['text'] for x in search_results)}
+            """.strip(),
         )
         return [
             KnowledgeTriple(subj=x["subject"], pred=x["predicate"], obj=x["object"])
