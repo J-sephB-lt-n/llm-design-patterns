@@ -457,11 +457,40 @@ Results:
     ) -> list[KnowledgeTriple]:
         """
         Traverse the knowledge graph outward from the nodes in `start_triples` by n_hops` steps \
-and return all unique knowledge triples (including `start_triples`) discovered along the way
-        """
-        logger.warning("expand_graph_neighbourhood() not implemented yet")
+and return all unique knowledge triples (including `start_triples`) discovered along the way.
 
-        return start_triples
+        Triples containing the node(s) "user" and/or "assistant" are included, but these nodes \
+are not traversed from (since these nodes occur in too many of the knowledge triples)
+        """
+        discovered_triples: set[KnowledgeTriple] = set(start_triples)
+        nodes_to_expand: set[str] = set()
+        for triple in start_triples:
+            for node in (triple.subj, triple.obj):
+                if node.lower() not in ("user", "assistant"):
+                    nodes_to_expand.add(node)
+
+        visited_nodes: set[str] = set()
+        for _ in range(n_hops):
+            if not nodes_to_expand:
+                break
+            next_nodes_to_expand: set[str] = set()
+            for node in nodes_to_expand:
+                if node in visited_nodes:
+                    continue
+                visited_nodes.add(node)
+
+                # traverse outwards from current node
+                for u, v, pred in self.graph.out_edges(node, keys=True):
+                    discovered_triples.add(KnowledgeTriple(u, pred, v))
+                    if v.lower() not in ("user", "assistant"):
+                        next_nodes_to_expand.add(v)
+                for u, v, pred in self.graph.in_edges(node, keys=True):
+                    discovered_triples.add(KnowledgeTriple(u, pred, v))
+                    if u.lower() not in ("user", "assistant"):
+                        next_nodes_to_expand.add(u)
+            nodes_to_expand = next_nodes_to_expand - visited_nodes
+
+        return list(discovered_triples)
 
     def chat(self, user_msg: str) -> None:
         """
