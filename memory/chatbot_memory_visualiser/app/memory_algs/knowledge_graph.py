@@ -21,11 +21,14 @@ from loguru import logger
 from app.lifecycle.teardown import app_cleanup
 from app.interfaces.memory_alg_protocol import ChatMessage, ChatMessageDetail, MemoryAlg
 
-LLM_SYSTEM_PROMPT: Final[str] = """
+LLM_SYSTEM_PROMPT: Final[str] = (
+    """
 You are a creative assistant who is having a conversation with a user
 """.strip()
+)
 
-LLM_RESPOND_PROMPT: Final[str] = """
+LLM_RESPOND_PROMPT: Final[str] = (
+    """
 <long-term-chat-history>
 {long_term_chat_history}
 </long-term-chat-history>
@@ -42,8 +45,10 @@ By referring to your most recent interactions with the user ("recent chat histor
 the retrieved memories from long-term chat history represented as knowledge triples (if \
 they are relevant), respond to the current user message.
 """.strip()
+)
 
-LLM_EXTRACT_KNOWLEDGE_TRIPLES_PROMPT: Final[str] = """
+LLM_EXTRACT_KNOWLEDGE_TRIPLES_PROMPT: Final[str] = (
+    """
 <conversation-snippet>
 {conversation_snippet}
 </conversation-snippet>
@@ -51,7 +56,8 @@ LLM_EXTRACT_KNOWLEDGE_TRIPLES_PROMPT: Final[str] = """
 From the provided conversation snippet between a user and an assistant, extract all information \
 which will be relevant to future interactions, in the form of a list of fact triples.
 
-Each fact must be associated with one or both of the personas 'user' and/or 'assistant'.
+Where a subject or object is associated with either the user or the assistant, then include this \
+in the subject/object name (e.g. "user's wife", "assistant's opinion").
 
 <required-output-format>
 Your response must include a JSON markdown codeblock containing a single list of lists, where \
@@ -65,10 +71,13 @@ each inner list contains exactly 3 strings (subject, predicate, object):
 Include spaces between words in subject, predicate and object.
 </required-output-format>
 """.strip()
+)
 
-LLM_RDF_TRIPLES_DEDUP_PROMPT: Final[str] = """
+LLM_RDF_TRIPLES_DEDUP_PROMPT: Final[
+    str
+] = """
 <proposed-new-knowledge-triples>
-```json
+```
 {new_rdf_triples}
 ```
 </proposed-new-knowledge-triples>
@@ -90,6 +99,9 @@ omit those that do not add any new information).
 triples in the existing knowledge database (e.g. the same subject/object is referenced but \
 with a difference in punctuation or case), then format the new triple so that it is \
 consistent with the existing triples.
+3. If there is any inconsistency amongst the proposed new triples (e.g. the same subject \
+or object is referenced in two different triples but with different case in each) then \
+make them consistent.
 
 <required-output-format>
 Your response must include a JSON markdown codeblock containing a single list of lists, where \
