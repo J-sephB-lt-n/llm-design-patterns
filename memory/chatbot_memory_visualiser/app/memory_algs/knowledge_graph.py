@@ -54,6 +54,11 @@ which will be relevant to future interactions, in the form of a list of fact tri
 Where a subject or object is associated with either the user or the assistant, then include this \
 in the subject/object name (e.g. "user's wife", "assistant's opinion").
 
+Bear in mind that we are aiming to build a wide knowledge graph which will be traversed in order \
+to retrieve relevant parts of the conversation. If every extracted triple has "assistant" and \
+"user" as subject and object then the graph will have 2 nodes with many edges, which is not \
+useful.
+
 <required-output-format>
 Your response must include a JSON markdown codeblock containing a single list of lists, where \
 each inner list contains exactly 3 strings (subject, predicate, object):
