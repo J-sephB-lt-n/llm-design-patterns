@@ -21,14 +21,11 @@ from loguru import logger
 from app.lifecycle.teardown import app_cleanup
 from app.interfaces.memory_alg_protocol import ChatMessage, ChatMessageDetail, MemoryAlg
 
-LLM_SYSTEM_PROMPT: Final[str] = (
-    """
+LLM_SYSTEM_PROMPT: Final[str] = """
 You are a creative assistant who is having a conversation with a user
 """.strip()
-)
 
-LLM_RESPOND_PROMPT: Final[str] = (
-    """
+LLM_RESPOND_PROMPT: Final[str] = """
 <long-term-chat-history>
 {long_term_chat_history}
 </long-term-chat-history>
@@ -45,10 +42,8 @@ By referring to your most recent interactions with the user ("recent chat histor
 the retrieved memories from long-term chat history represented as knowledge triples (if \
 they are relevant), respond to the current user message.
 """.strip()
-)
 
-LLM_EXTRACT_KNOWLEDGE_TRIPLES_PROMPT: Final[str] = (
-    """
+LLM_EXTRACT_KNOWLEDGE_TRIPLES_PROMPT: Final[str] = """
 <conversation-snippet>
 {conversation_snippet}
 </conversation-snippet>
@@ -71,11 +66,8 @@ each inner list contains exactly 3 strings (subject, predicate, object):
 Include spaces between words in subject, predicate and object.
 </required-output-format>
 """.strip()
-)
 
-LLM_RDF_TRIPLES_DEDUP_PROMPT: Final[
-    str
-] = """
+LLM_RDF_TRIPLES_DEDUP_PROMPT: Final[str] = """
 <proposed-new-knowledge-triples>
 ```
 {new_rdf_triples}
@@ -329,7 +321,7 @@ newly proposed triple) in order to check for duplicated knowledge.
             Fetched relevant knowledge triples: 
 Query: "{query}"
 Results:
-{"\n".join("\t"+x['text'] for x in search_results)}
+{"\n".join("\t" + x["text"] for x in search_results)}
             """.strip(),
         )
         return [
@@ -463,11 +455,12 @@ and return all unique knowledge triples (including `start_triples`) discovered a
 are not traversed from (since these nodes occur in too many of the knowledge triples)
         """
         discovered_triples: set[KnowledgeTriple] = set(start_triples)
-        nodes_to_expand: set[str] = set()
-        for triple in start_triples:
-            for node in (triple.subj, triple.obj):
-                if node.lower() not in ("user", "assistant"):
-                    nodes_to_expand.add(node)
+        nodes_to_expand: set[str] = {
+            node
+            for triple in start_triples
+            for node in (triple.subj, triple.obj)
+            if node.lower() not in ("user", "assistant")
+        }
 
         visited_nodes: set[str] = set()
         for _ in range(n_hops):
@@ -475,20 +468,43 @@ are not traversed from (since these nodes occur in too many of the knowledge tri
                 break
             next_nodes_to_expand: set[str] = set()
             for node in nodes_to_expand:
-                if node in visited_nodes:
-                    continue
                 visited_nodes.add(node)
 
                 # traverse outwards from current node
-                for u, v, pred in self.graph.out_edges(node, keys=True):
-                    discovered_triples.add(KnowledgeTriple(u, pred, v))
-                    if v.lower() not in ("user", "assistant"):
-                        next_nodes_to_expand.add(v)
-                for u, v, pred in self.graph.in_edges(node, keys=True):
-                    discovered_triples.add(KnowledgeTriple(u, pred, v))
-                    if u.lower() not in ("user", "assistant"):
-                        next_nodes_to_expand.add(u)
+                for src_node, dest_node, edge in self.graph.out_edges(node, keys=True):
+                    discovered_triples.add(
+                        KnowledgeTriple(
+                            subj=src_node,
+                            pred=edge,
+                            obj=dest_node,
+                        )
+                    )
+                    if dest_node.lower() not in ("user", "assistant"):
+                        next_nodes_to_expand.add(dest_node)
+
+                for src_node, dest_node, edge in self.graph.in_edges(node, keys=True):
+                    discovered_triples.add(
+                        KnowledgeTriple(
+                            subj=src_node,
+                            pred=edge,
+                            obj=dest_node,
+                        )
+                    )
+                    if src_node.lower() not in ("user", "assistant"):
+                        next_nodes_to_expand.add(src_node)
+
             nodes_to_expand = next_nodes_to_expand - visited_nodes
+        logger.debug(
+            """Expanded graph neighbourhood
+start triples:
+%s
+expanded triples (after % hops):
+%s
+            """,
+            start_triples,
+            n_hops,
+            discovered_triples,
+        )
 
         return list(discovered_triples)
 
