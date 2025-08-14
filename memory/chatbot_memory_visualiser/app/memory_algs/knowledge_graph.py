@@ -494,17 +494,6 @@ are not traversed from (since these nodes occur in too many of the knowledge tri
                         next_nodes_to_expand.add(src_node)
 
             nodes_to_expand = next_nodes_to_expand - visited_nodes
-        logger.debug(
-            """Expanded graph neighbourhood
-start triples:
-%s
-expanded triples (after % hops):
-%s
-            """,
-            start_triples,
-            n_hops,
-            discovered_triples,
-        )
 
         return list(discovered_triples)
 
@@ -520,9 +509,15 @@ expanded triples (after % hops):
         )
         initial_relevant_knowledge_triples: list[KnowledgeTriple] = (
             self.fetch_relevant_knowledge_triples(
-                query=self.chat_messages_to_text(
-                    messages=list(self.recent_chat_messages)[-self.n_context_triples :],
-                    message_render_style=self.message_render_style,
+                # query=self.chat_messages_to_text(
+                #     messages=list(self.recent_chat_messages)[-self.n_context_triples :],
+                #     message_render_style=self.message_render_style,
+                # ),
+                query="\n".join(
+                    msg.content
+                    for msg in list(self.recent_chat_messages)[
+                        -self.n_context_triples :
+                    ]
                 ),
                 n_to_fetch=self.n_context_triples,
                 search_method=self.vector_search_method,
