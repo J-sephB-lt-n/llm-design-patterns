@@ -1,6 +1,6 @@
 """
 Memory algorithm which stores the few most recent chat messages and the full chat history \
-in a vector database
+in a vector database.
 """
 
 import json
@@ -25,6 +25,30 @@ class VectorMemory(MemoryAlg):
     Memory algorithm which stores only the few most recent chat messages, but also the full \
     chat history in a vector database
 
+    Note:
+        - The way that memories are currently written to vector storage cuts off the conversation \
+          in an arbitary place (i.e. a logical multi-turn segment of the conversation might be cut in half).
+        - In a production implementation of this algorithm, a rolling window approach (with dedup at \
+          retrieval time) would be better, so that every conversation window is captured.
+        - If facts are being extracted (rather than just conversation snippets saved), then the same \
+          thing applies (except there will need to be a LLM fact deduping step).
+
+    Algorithm summary:
+        1. The last `n_chat_messages_in_working_memory` most recent chat messages are kept in context
+            (i.e. in the prompt)
+        2. To reply to a new user message, the `n_vector_memories_to_fetch` most similar memories to the \
+            `recall_query_n_chat_messages` most recent chat messages are retrieved from the vector database
+        3. The assistant generates a response based on the user message, the recent chat history and the \
+            retrieved memories
+        4. When the recent chat history gets `n_chat_messages_in_working_memory` message long, the \
+            `archive_n_messages_at_a_time` oldest chat messages are written to archival storage (the vector \
+            database).
+            This is done either by:
+                a) Embedding the content of these messages directly (just the chat messages)
+                    OR
+                b) The LLM extracts facts from these messages and the facts are written to the vector database
+            Which approach is used is controlled by `vector_memory_type`
+
     Attributes:
         llm_client (openai.OpenAI): Model API client
         llm_name (str): Model name (model identifier in model API)
@@ -33,9 +57,12 @@ class VectorMemory(MemoryAlg):
         n_chat_messages_in_working_memory (int): Number of most recent chat messages to keep in working 
             memory (model prompt).
             Messages older than this are embedded and written to the vector database.
-            In this context, 1 user message + 1 assistant response is considered 1 'message'
-        n_vector_memories_to_fetch (int): In every chat completion, this number of chat messages will be 
-            fetched from the full chat history (vector database) and included in the model prompt.
+        n_vector_memories_to_fetch (int): In every chat completion, this number of memories are
+            fetched from the vector database and included in the model prompt.
+        recall_query_n_chat_messages (int): The number of (most recent) messages in the recent chat history 
+            to use as query when fetching from the vector database.
+        archive_n_messages_at_a_time (int): Number of messages to group together when removing messages 
+            from the recent chat history and writing them to archival storage (the vector database)
         vector_search_method (str): Search algorithm used for fetching memories from the vector database
             One of ['semantic_dense', 'hybrid']
         vector_memory_type (str): Format used to generate vector memories.
@@ -58,6 +85,8 @@ class VectorMemory(MemoryAlg):
         system_prompt: str = "You are a creative assistant helping a user to solve their problem.",
         n_chat_messages_in_working_memory: int = 10,
         n_vector_memories_to_fetch: int = 5,
+        recall_query_n_chat_messages: int = 1,
+        archive_n_messages_at_a_time: int = 4,
         vector_search_method: Literal["semantic_dense", "hybrid"] = "hybrid",
         vector_memory_type: Literal[
             "chat_message", "extracted_facts"
@@ -67,6 +96,12 @@ class VectorMemory(MemoryAlg):
         # delete any temporary files created by previous alg #
         app_cleanup()
 
+        if recall_query_n_chat_messages > n_chat_messages_in_working_memory:
+            raise ValueError("`recall_query_n_chat_messages` must be smaller than `n_chat_messages_in_working_memory`")
+
+        if archive_n_messages_at_a_time > n_chat_messages_in_working_memory:
+            raise ValueError("`archive_n_messages_at_a_time` must be smaller than `n_chat_messages_in_working_memory`")
+
         self.chat_history: list[ChatMessageDetail] = []
         self.recent_chat_messages: list[ChatMessage] = []
         self.llm_client = llm_client
@@ -75,6 +110,8 @@ class VectorMemory(MemoryAlg):
         self.system_prompt = system_prompt
         self.n_chat_messages_in_working_memory = n_chat_messages_in_working_memory
         self.n_vector_memories_to_fetch = n_vector_memories_to_fetch
+        self.recall_query_n_chat_messages = recall_query_n_chat_messages
+        self.archive_n_messages_at_a_time = archive_n_messages_at_a_time
         self.vector_search_method: Literal["semantic_dense", "hybrid"] = (
             vector_search_method
         )
@@ -174,7 +211,6 @@ class VectorMemory(MemoryAlg):
             ChatMessage(role="system", content=self.system_prompt),
             self.augment_user_msg(user_msg, relevant_memories),
         ]
-        logger.debug([msg.model_dump() for msg in prompt_messages])
         llm_api_response = self.llm_client.chat.completions.create(
             model=self.llm_name,
             temperature=self.llm_temperature,
@@ -185,7 +221,10 @@ class VectorMemory(MemoryAlg):
             content=llm_api_response.choices[0].message.content,
         )
         logger.debug(
-            assistant_response.model_dump_json(indent=4),
+            "\n".join(
+                f"--{msg.role.upper()}--\n{msg.content}" 
+                for msg in prompt_messages + [assistant_response]
+            )
         )
         self.recent_chat_messages.append(assistant_response)
         self.chat_history.append(
@@ -198,9 +237,9 @@ class VectorMemory(MemoryAlg):
                 token_usage=llm_api_response.usage.model_dump(),
             )
         )
-        if len(self.recent_chat_messages) / 2 > self.n_chat_messages_in_working_memory:
-            messages_to_archive: list[ChatMessage] = self.recent_chat_messages[:2]
-            self.recent_chat_messages = self.recent_chat_messages[2:]
+        if len(self.recent_chat_messages) > self.n_chat_messages_in_working_memory:
+            messages_to_archive: list[ChatMessage] = self.recent_chat_messages[:self.archive_n_messages_at_a_time]
+            self.recent_chat_messages = self.recent_chat_messages[self.archive_n_messages_at_a_time:]
             match self.vector_memory_type:
                 case "chat_message":
                     self.add_vector_memory(
@@ -256,6 +295,9 @@ class VectorMemory(MemoryAlg):
 From the given conversation snippet, extract all facts (distinct pieces of knowledge). \
 These facts will be retrieved by the assistant (you) in order to generate informed \
 replies in future conversations with this user.
+
+Important facts include preferences and history revealed by the user, as well as anything \
+else which you deem may be useful to recall in future conversations with this user.
 
 Return the facts as a list of strings contained within a JSON markdown code block. If there \
 are no facts, return an empty list.
