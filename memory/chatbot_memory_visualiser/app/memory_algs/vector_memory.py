@@ -91,7 +91,7 @@ class VectorMemory(MemoryAlg):
         vector_memory_type: Literal[
             "chat_message", "extracted_facts"
         ] = "extracted_facts",
-        message_render_style: Literal["plain_text", "json_dumps"] = "plain_text",
+        message_render_style: Literal["plain_text", "json_dumps", "xml"] = "plain_text",
     ) -> None:
         # delete any temporary files created by previous alg #
         app_cleanup()
@@ -199,11 +199,15 @@ class VectorMemory(MemoryAlg):
                 content=user_msg,
             )
         )
+        memory_query: str = self.chat_messages_to_text(
+                messages=self.recent_chat_messages[-self.recall_query_n_chat_messages:],
+                message_render_style=self.message_render_style,
+            )
+        logger.debug(
+            f"--Memory retrieval query--\n{memory_query}" 
+        )
         relevant_memories: list[str] = self.fetch_relevant_memories(
-            query=self.chat_messages_to_text(
-                messages=self.recent_chat_messages,
-                output_style=self.message_render_style,
-            ),
+            query=memory_query,
             n_to_fetch=self.n_vector_memories_to_fetch,
             search_method=self.vector_search_method,
         )
@@ -245,7 +249,7 @@ class VectorMemory(MemoryAlg):
                     self.add_vector_memory(
                         self.chat_messages_to_text(
                             messages=messages_to_archive,
-                            output_style=self.message_render_style,
+                            message_render_style=self.message_render_style,
                         )
                     )
                 case "extracted_facts":
@@ -289,7 +293,7 @@ class VectorMemory(MemoryAlg):
         """
         prompt: str = f"""
 <conversation-snippet>
-{self.chat_messages_to_text(messages=messages, output_style=self.message_render_style)}
+{self.chat_messages_to_text(messages=messages, message_render_style=self.message_render_style)}
 </conversation-snippet>
 
 From the given conversation snippet, extract all facts (distinct pieces of knowledge). \
@@ -345,12 +349,12 @@ are no facts, return an empty list.
     def chat_messages_to_text(
         self,
         messages: list[ChatMessage],
-        output_style: Literal["json_dumps", "plain_text", "xml"],
+        message_render_style: Literal["json_dumps", "plain_text", "xml"],
     ) -> str:
         """
         Represent sequence of chat-completion messages as a single string
         """
-        match output_style:
+        match message_render_style:
             case "json_dumps":
                 return json.dumps(
                     [msg.model_dump() for msg in messages],
@@ -364,8 +368,6 @@ are no facts, return an empty list.
                 return "\n".join(
                     [f"<{msg.role}>\n{msg.content}\n</{msg.role}>" for msg in messages]
                 )
-            case _:
-                raise ValueError(f"Unknown output style '{output_style}'")
 
     def view_memory_as_json(self) -> dict:
         """
