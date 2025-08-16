@@ -296,9 +296,6 @@ From the given conversation snippet, extract all facts (distinct pieces of knowl
 These facts will be retrieved by the assistant (you) in order to generate informed \
 replies in future conversations with this user.
 
-Important facts include preferences and history revealed by the user, as well as anything \
-else which you deem may be useful to recall in future conversations with this user.
-
 Return the facts as a list of strings contained within a JSON markdown code block. If there \
 are no facts, return an empty list.
 
