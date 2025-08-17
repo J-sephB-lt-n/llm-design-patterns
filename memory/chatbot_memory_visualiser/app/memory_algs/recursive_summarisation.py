@@ -144,7 +144,7 @@ Long-Term Dialogue Memory in Large Language Models" (https://arxiv.org/abs/2308.
 </summary-of-chat-history>
                 """,
             ),
-            user_message,
+            *self.session_memory,
         ]
         api_generation_response = self.llm_client.chat.completions.create(
             model=self.llm_name,
