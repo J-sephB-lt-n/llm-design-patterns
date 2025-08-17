@@ -12,12 +12,16 @@ from app.interfaces.memory_alg_protocol import ChatMessage, ChatMessageDetail, M
 
 
 MEMORY_ITERATION_PROMPT: Final[str] = dedent(
-    # This is an edited version of the prompt in the paper
-    #   "Recursively Summarizing Enables Long-Term Dialogue Memory in Large Language Models"
-    #   (https://arxiv.org/abs/2308.15022)
     """
-    You are an advanced AI language model with the ability to store and update a memory to keep \
-    track of key personality information for both the user and the bot. \
+    <previous-memory>
+    {previous_memory}
+    </previous-memory>
+
+    <session-context>
+    {session_context}
+    </session-context>
+
+    Using the given session context (a chat between you and a user)
     You will receive a previous memory and dialogue context. \
     Your goal is to update the memory by incorporating the new personality information.
     To successfully update the memory, follow these steps:
@@ -91,11 +95,12 @@ Long-Term Dialogue Memory in Large Language Models" (https://arxiv.org/abs/2308.
         min_n_messages_in_session_memory (int): When messages are removed from "session memory" \
                                         (in prompt) and included in the summary, this many \
                                         messages (the most recent) are kept in session memory.
-        session_memory_render_style (str): Method used to show the messages in "session memory" \
-                                        to the model (in it's prompt).
-                                        One of ['json_dumps', 'plain_text'].
-                                        'plain_text' looks like "USER: ...<br>ASSISTANT: ..."
-                                        'json_dumps' gives standard chat completion messages JSON
+        message_render_style (str): Controls how chat messages are rendered when including them in \
+            model prompts.
+            One of ['json_dumps', 'plain_text', 'xml'].
+            'plain_text' looks like "USER: ...<br>ASSISTANT: ...<br> ..."
+            'json_dumps' gives standard chat completion messages JSON
+            'xml' looks like "<user>...</user> <assistant>...</assistant> ..."
     """
 
     alg_description = dedent(
@@ -109,19 +114,21 @@ Long-Term Dialogue Memory in Large Language Models" (https://arxiv.org/abs/2308.
         llm_client: openai.OpenAI,
         llm_name: str,
         llm_temperature: float,
+        system_prompt: str = "You are a helpful and creative assistant conversing with a user.",
         summary_max_n_sentences: int = 20,
         summarise_every_n_user_messages: int = 10,
         min_n_messages_in_session_memory: int = 5,
-        session_memory_render_style: Literal["json_dumps", "plain_text"] = "plain_text",
+        messge_render_style: Literal["json_dumps", "plain_text", "xml"] = "plain_text",
     ):
         self.chat_history: list[ChatMessageDetail] = []
         self.llm_client = llm_client
         self.llm_name = llm_name
         self.llm_temperature = llm_temperature
+        self.system_prompt = system_prompt
         self.summary_max_n_sentences = summary_max_n_sentences
         self.summarise_every_n_user_messages = summarise_every_n_user_messages
         self.min_n_messages_in_session_memory = min_n_messages_in_session_memory
-        self.session_memory_render_style = session_memory_render_style
+        self.message_render_style = messge_render_style
         self.session_memory: list[ChatMessage] = []
         self.chat_summary: str = ""
         self.user_message_counter: int = 0
@@ -129,12 +136,12 @@ Long-Term Dialogue Memory in Large Language Models" (https://arxiv.org/abs/2308.
     def chat_messages_to_text(
         self,
         messages: list[ChatMessage],
-        output_style: Literal["json_dumps", "plain_text"],
+        message_render_style: Literal["json_dumps", "plain_text", "xml"],
     ) -> str:
         """
         Represent sequence of chat-completion messages as a single string
         """
-        match output_style:
+        match message_render_style:
             case "json_dumps":
                 return json.dumps(
                     [msg.model_dump() for msg in messages],
@@ -144,8 +151,10 @@ Long-Term Dialogue Memory in Large Language Models" (https://arxiv.org/abs/2308.
                 return "\n".join(
                     [f"{msg.role.upper()}: {msg.content}" for msg in messages]
                 )
-            case _:
-                raise ValueError(f"Unknown output style '{output_style}'")
+            case "xml":
+                return "\n".join(
+                    [f"<{msg.role}>\n{msg.content}\n</{msg.role}>" for msg in messages]
+                )
 
     def chat(self, user_msg: str) -> None:
         """
@@ -156,20 +165,23 @@ Long-Term Dialogue Memory in Large Language Models" (https://arxiv.org/abs/2308.
             content=user_msg,
         )
         self.session_memory.append(user_message)
-        internal_generation_prompt = ChatMessage(
-            role="user",
-            content=MEMORY_BASED_RESPONSE_GENERATION_PROMPT.format(
-                previous_memory=self.chat_summary,
-                current_context=self.chat_messages_to_text(
-                    self.session_memory,
-                    output_style=self.session_memory_render_style,
+        internal_generation_prompt_messages: list[ChatMessage] = [
+            ChatMessage(role="system", content=self.system_prompt),
+            ChatMessage(
+                role="user",
+                content=MEMORY_BASED_RESPONSE_GENERATION_PROMPT.format(
+                    previous_memory=self.chat_summary,
+                    current_context=self.chat_messages_to_text(
+                        self.session_memory,
+                        message_render_style=self.message_render_style,
+                    ),
                 ),
             ),
-        )
+        ]
         api_generation_response = self.llm_client.chat.completions.create(
             model=self.llm_name,
             temperature=self.llm_temperature,
-            messages=[internal_generation_prompt.model_dump()],
+            messages=[msg.model_dump() for msg in internal_generation_prompt_messages],
         )
         assistant_generation_response = ChatMessage(
             role=api_generation_response.choices[0].message.role,
@@ -180,7 +192,7 @@ Long-Term Dialogue Memory in Large Language Models" (https://arxiv.org/abs/2308.
             ChatMessageDetail(
                 visible_messages=[user_message, assistant_generation_response],
                 all_messages=[
-                    internal_generation_prompt,
+                    *internal_generation_prompt_messages,
                     assistant_generation_response,
                 ],
                 token_usage=api_generation_response.usage.model_dump(),
@@ -189,27 +201,32 @@ Long-Term Dialogue Memory in Large Language Models" (https://arxiv.org/abs/2308.
         self.user_message_counter += 1
         if self.user_message_counter >= self.summarise_every_n_user_messages:
             self.user_message_counter = 0
-            internal_summarisation_prompt = ChatMessage(
-                role="user",
-                content=MEMORY_ITERATION_PROMPT.format(
-                    summary_max_n_sentences=self.summary_max_n_sentences,
-                    previous_memory=self.chat_summary,
-                    session_context=self.chat_messages_to_text(
-                        (
-                            self.session_memory
-                            if self.min_n_messages_in_session_memory == 0
-                            else self.session_memory[
-                                : -self.min_n_messages_in_session_memory
-                            ]
+            internal_summarisation_prompt_messages: list[ChatMessage] = [
+                ChatMessage(role="system", content=self.system_prompt),
+                ChatMessage(
+                    role="user",
+                    content=MEMORY_ITERATION_PROMPT.format(
+                        summary_max_n_sentences=self.summary_max_n_sentences,
+                        previous_memory=self.chat_summary,
+                        session_context=self.chat_messages_to_text(
+                            (
+                                self.session_memory
+                                if self.min_n_messages_in_session_memory == 0
+                                else self.session_memory[
+                                    : -self.min_n_messages_in_session_memory
+                                ]
+                            ),
+                            message_render_style=self.message_render_style,
                         ),
-                        output_style=self.session_memory_render_style,
                     ),
                 ),
-            )
+            ]
             api_summarisation_response = self.llm_client.chat.completions.create(
                 model=self.llm_name,
                 temperature=self.llm_temperature,
-                messages=[internal_summarisation_prompt.model_dump()],
+                messages=[
+                    msg.model_dump() for msg in internal_summarisation_prompt_messages
+                ],
             )
             assistant_summarisation_response = ChatMessage(
                 role=api_summarisation_response.choices[0].message.role,
@@ -225,7 +242,7 @@ Long-Term Dialogue Memory in Large Language Models" (https://arxiv.org/abs/2308.
                 ChatMessageDetail(
                     visible_messages=[],
                     all_messages=[
-                        internal_summarisation_prompt,
+                        *internal_summarisation_prompt_messages,
                         assistant_summarisation_response,
                     ],
                     token_usage=api_summarisation_response.usage.model_dump(),
