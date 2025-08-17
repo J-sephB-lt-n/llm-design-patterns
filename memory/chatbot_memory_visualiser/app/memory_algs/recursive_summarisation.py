@@ -7,70 +7,38 @@ from textwrap import dedent
 from typing import Final, Literal
 
 import openai
+from loguru import logger
 
 from app.interfaces.memory_alg_protocol import ChatMessage, ChatMessageDetail, MemoryAlg
 
 
 MEMORY_ITERATION_PROMPT: Final[str] = dedent(
     """
-    <previous-memory>
-    {previous_memory}
-    </previous-memory>
+    <previous-chat-summary>
+    {previous_chat_summary}
+    </previous-chat-summary>
 
-    <session-context>
-    {session_context}
-    </session-context>
+    <most-recent-interactions>
+    {most_recent_interactions}
+    </most-recent-interactions>
 
-    Using the given session context (a chat between you and a user)
-    You will receive a previous memory and dialogue context. \
-    Your goal is to update the memory by incorporating the new personality information.
-    To successfully update the memory, follow these steps:
-    1. Carefully analyze the existing memory and extract the key personality of the user and bot from it.
-    2. Consider the dialogue context provided to identify any new or changed personality that needs to \
-        be incorporated into the memory.
-    3. Combine the old and new personality information to create an updated representation of the user and \
-        bot's traits.
-    4. Structure the updated memory in a clear and concise manner, ensuring it does not \
-    exceed {summary_max_n_sentences} sentences.
-    Remember, the memory should serve as a reference point to maintain continuity in the dialogue \
-    and help you respond accurately to the user based on their personality.
+    Your task is to update the previous chat summary (a concise summary of your entire past \
+    conversation with the user) with the new facts and information present in your most \
+    recent interactions with the user.
+    
+    Do your best to pack as much information into the summary as you can.
+    If (due to space constraints) you must discard information, then discard information which \
+    you deem to be the least important to the user and the conversation.
 
-    <previous-memory>
-    {previous_memory}
-    </previous-memory>
+    Your summary alone will be used by a future assistant (with no context other than your \
+    summary) in order to continue the conversation with the user, so your summary must \
+    contain all of the information essential to keeping track of the important parts of the \
+    conversation.
 
-    <session-context>
-    {session_context}
-    </session-context>
+    Your summary is not allowed to be longer than {summary_max_n_sentences} sentences.
 
-    Return only the updated memory text.
+    Return only the summary text.
 """
-)
-
-MEMORY_BASED_RESPONSE_GENERATION_PROMPT: Final[str] = dedent(
-    # This is an edited version of the prompt in the paper
-    #   "Recursively Summarizing Enables Long-Term Dialogue Memory in Large Language Models"
-    #   (https://arxiv.org/abs/2308.15022)
-    """
-    You will be provided with a memory containing personality information for both yourself \
-    and the user.
-    Your goal is to respond accurately to the user based on the personality traits and dialogue context.
-    Follow these steps to successfully complete the task:
-    1. Analyze the provided memory to extract the key personality traits for both yourself and the user. 
-    2. Review the dialogue history to understand the context and flow of the conversation. 
-    3. Utilize the extracted personality traits and dialogue context to formulate an appropriate response. 
-    4. If no specific personality trait is applicable, respond naturally as a human would. 
-    5. Pay attention to the relevance and importance of the personality information, focusing on capturing
-    the most significant aspects while maintaining the overall coherence of the memory.
-
-    <previous-memory>
-    {previous_memory}
-    </previous-memory>
-
-    <current-context>
-    {current_context}
-    </current-context>
-    """
 )
 
 
@@ -166,17 +134,17 @@ Long-Term Dialogue Memory in Large Language Models" (https://arxiv.org/abs/2308.
         )
         self.session_memory.append(user_message)
         internal_generation_prompt_messages: list[ChatMessage] = [
-            ChatMessage(role="system", content=self.system_prompt),
             ChatMessage(
-                role="user",
-                content=MEMORY_BASED_RESPONSE_GENERATION_PROMPT.format(
-                    previous_memory=self.chat_summary,
-                    current_context=self.chat_messages_to_text(
-                        self.session_memory,
-                        message_render_style=self.message_render_style,
-                    ),
-                ),
+                role="system",
+                content=self.system_prompt
+                + f"""
+                
+<summary-of-chat-history>
+{self.chat_summary}
+</summary-of-chat-history>
+                """,
             ),
+            user_message,
         ]
         api_generation_response = self.llm_client.chat.completions.create(
             model=self.llm_name,
@@ -186,6 +154,15 @@ Long-Term Dialogue Memory in Large Language Models" (https://arxiv.org/abs/2308.
         assistant_generation_response = ChatMessage(
             role=api_generation_response.choices[0].message.role,
             content=api_generation_response.choices[0].message.content,
+        )
+        logger.debug(
+            "\n".join(
+                f"--{msg.role.upper()}--\n{msg.content}"
+                for msg in [
+                    *internal_generation_prompt_messages,
+                    assistant_generation_response,
+                ]
+            )
         )
         self.session_memory.append(assistant_generation_response)
         self.chat_history.append(
@@ -207,8 +184,8 @@ Long-Term Dialogue Memory in Large Language Models" (https://arxiv.org/abs/2308.
                     role="user",
                     content=MEMORY_ITERATION_PROMPT.format(
                         summary_max_n_sentences=self.summary_max_n_sentences,
-                        previous_memory=self.chat_summary,
-                        session_context=self.chat_messages_to_text(
+                        previous_chat_summary=self.chat_summary,
+                        most_recent_interactions=self.chat_messages_to_text(
                             (
                                 self.session_memory
                                 if self.min_n_messages_in_session_memory == 0
@@ -231,6 +208,15 @@ Long-Term Dialogue Memory in Large Language Models" (https://arxiv.org/abs/2308.
             assistant_summarisation_response = ChatMessage(
                 role=api_summarisation_response.choices[0].message.role,
                 content=api_summarisation_response.choices[0].message.content,
+            )
+            logger.debug(
+                "\n".join(
+                    f"--{msg.role.upper()}--\n{msg.content}"
+                    for msg in [
+                        *internal_summarisation_prompt_messages,
+                        assistant_summarisation_response,
+                    ]
+                )
             )
             self.session_memory = (
                 []
