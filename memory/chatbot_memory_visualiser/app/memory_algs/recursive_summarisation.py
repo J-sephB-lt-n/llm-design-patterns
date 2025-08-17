@@ -37,7 +37,7 @@ MEMORY_ITERATION_PROMPT: Final[str] = dedent(
 
     Your summary is not allowed to be longer than {summary_max_n_sentences} sentences.
 
-    Return only the summary text.
+    Return only the summary text - no commentary. You may return an empty string.
 """
 )
 
