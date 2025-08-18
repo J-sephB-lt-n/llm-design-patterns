@@ -14,18 +14,23 @@ import model2vec
 import networkx as nx
 import numpy as np
 import openai
+import plotly.graph_objects as go
 import pyarrow as pa
+import streamlit as st
 from lancedb.rerankers import RRFReranker
 from loguru import logger
 
 from app.lifecycle.teardown import app_cleanup
 from app.interfaces.memory_alg_protocol import ChatMessage, ChatMessageDetail, MemoryAlg
 
-LLM_SYSTEM_PROMPT: Final[str] = """
+LLM_SYSTEM_PROMPT: Final[str] = (
+    """
 You are a creative assistant who is having a conversation with a user
 """.strip()
+)
 
-LLM_RESPOND_PROMPT: Final[str] = """
+LLM_RESPOND_PROMPT: Final[str] = (
+    """
 <long-term-chat-history>
 {long_term_chat_history}
 </long-term-chat-history>
@@ -42,8 +47,10 @@ By referring to your most recent interactions with the user ("recent chat histor
 the retrieved memories from long-term chat history represented as knowledge triples (if \
 they are relevant), respond to the current user message.
 """.strip()
+)
 
-LLM_EXTRACT_KNOWLEDGE_TRIPLES_PROMPT: Final[str] = """
+LLM_EXTRACT_KNOWLEDGE_TRIPLES_PROMPT: Final[str] = (
+    """
 <conversation-snippet>
 {conversation_snippet}
 </conversation-snippet>
@@ -71,8 +78,11 @@ each inner list contains exactly 3 strings (subject, predicate, object):
 Include spaces between words in subject, predicate and object.
 </required-output-format>
 """.strip()
+)
 
-LLM_RDF_TRIPLES_DEDUP_PROMPT: Final[str] = """
+LLM_RDF_TRIPLES_DEDUP_PROMPT: Final[
+    str
+] = """
 <proposed-new-knowledge-triples>
 ```
 {new_rdf_triples}
@@ -622,3 +632,101 @@ are not traversed from (since these nodes occur in too many of the knowledge tri
             ],
             "vectors": [x for x in self.knowledge_triple_embeddings.search().to_list()],
         }
+
+    def custom_streamlit_plot(self) -> None:
+        G = self.graph
+        if not G.nodes:
+            st.info("Knowledge graph is empty.")
+            return
+
+        pos = nx.spring_layout(G, seed=42, k=1.5, iterations=50)
+
+        # Create edge trace
+        edge_x, edge_y = [], []
+        for edge in G.edges():
+            x0, y0 = pos[edge[0]]
+            x1, y1 = pos[edge[1]]
+            edge_x.extend([x0, x1, None])
+            edge_y.extend([y0, y1, None])
+
+        edge_trace = go.Scatter(
+            x=edge_x,
+            y=edge_y,
+            line=dict(width=1, color="#888"),
+            hoverinfo="none",
+            mode="lines",
+        )
+
+        # Create node trace
+        node_x, node_y, node_text, node_deg = [], [], [], []
+        for node in G.nodes():
+            x, y = pos[node]
+            node_x.append(x)
+            node_y.append(y)
+            node_text.append(str(node))
+            node_deg.append(G.degree(node))
+
+        node_trace = go.Scatter(
+            x=node_x,
+            y=node_y,
+            mode="markers+text",
+            hoverinfo="none",
+            text=node_text,
+            textposition="top center",
+            marker=dict(size=[10 + 2 * d for d in node_deg], line=dict(width=2)),
+        )
+
+        # Create edge label trace
+        edge_label_x, edge_label_y, edge_label_text = [], [], []
+        for u, v, key in G.edges(keys=True):
+            x0, y0 = pos[u]
+            x1, y1 = pos[v]
+            edge_label_x.append((x0 + x1) / 2)
+            edge_label_y.append((y0 + y1) / 2)
+            edge_label_text.append(str(key))
+
+        edge_label_trace = go.Scatter(
+            x=edge_label_x,
+            y=edge_label_y,
+            mode="text",
+            text=edge_label_text,
+            hoverinfo="none",
+            textfont=dict(size=10),
+        )
+
+        # Create figure
+        fig = go.Figure(data=[edge_trace, node_trace, edge_label_trace])
+
+        # Add arrows
+        annotations = [
+            dict(
+                ax=pos[edge[0]][0],
+                ay=pos[edge[0]][1],
+                axref="x",
+                ayref="y",
+                x=pos[edge[1]][0],
+                y=pos[edge[1]][1],
+                xref="x",
+                yref="y",
+                showarrow=True,
+                arrowhead=2,
+                arrowsize=1,
+                arrowwidth=1,
+                arrowcolor="#888",
+            )
+            for edge in G.edges()
+        ]
+
+        fig.update_layout(
+            showlegend=False,
+            hovermode=None,
+            margin=dict(b=10, l=5, r=5, t=10),
+            annotations=annotations,
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False),
+        )
+
+        # Keep aspect ratio square for prettier layout
+        fig.update_yaxes(scaleanchor="x", scaleratio=1)
+
+        st.plotly_chart(fig, use_container_width=True)

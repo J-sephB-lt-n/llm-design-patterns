@@ -289,6 +289,9 @@ def memory_page():
     st.markdown("The current state of the algorithm's memory is:")
     st.json(st.session_state.memory_alg.view_memory_as_json())
 
+    if hasattr(st.session_state.memory_alg, "custom_streamlit_plot"):
+        st.session_state.memory_alg.custom_streamlit_plot()
+
 
 def main():
     PAGES: Final[dict[str, Callable]] = {
