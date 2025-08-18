@@ -331,14 +331,6 @@ newly proposed triple) in order to check for duplicated knowledge.
                     .to_list()
                 )
 
-        logger.debug(
-            f"""
-            Fetched relevant knowledge triples: 
-Query: "{query}"
-Results:
-{"\n".join("\t" + x["text"] for x in search_results)}
-            """.strip(),
-        )
         return [
             KnowledgeTriple(subj=x["subject"], pred=x["predicate"], obj=x["object"])
             for x in search_results
@@ -522,30 +514,37 @@ are not traversed from (since these nodes occur in too many of the knowledge tri
                 content=user_msg,
             )
         )
+        logger.debug(f"New user message:\n{user_msg}")
+        retrieve_triples_query: str = "\n".join(
+            msg.content
+            for msg in list(self.recent_chat_messages)[-self.n_context_triples :]
+        )
         initial_relevant_knowledge_triples: list[KnowledgeTriple] = (
             self.fetch_relevant_knowledge_triples(
-                # query=self.chat_messages_to_text(
-                #     messages=list(self.recent_chat_messages)[-self.n_context_triples :],
-                #     message_render_style=self.message_render_style,
-                # ),
-                query="\n".join(
-                    msg.content
-                    for msg in list(self.recent_chat_messages)[
-                        -self.n_context_triples :
-                    ]
-                ),
+                query=retrieve_triples_query,
                 n_to_fetch=self.n_context_triples,
                 search_method=self.vector_search_method,
             )
         )
-        logger.debug(f"Initial relevant triples: {initial_relevant_knowledge_triples}")
         relevant_knowledge_triples: list[KnowledgeTriple] = (
             self.expand_graph_neighbourhood(
                 start_triples=initial_relevant_knowledge_triples,
                 n_hops=self.n_context_hops,
             )
         )
-        logger.debug(f"Expanded relevant triples: {relevant_knowledge_triples}")
+        logger.debug(
+            f"""
+--RETRIEVING KNOWLEDGE TRIPLES--
+QUERY:
+{retrieve_triples_query}
+
+START TRIPLES:
+{"\n".join("(" + x.subj + ", " + x.pred + ", " + x.obj + ")" for x in initial_relevant_knowledge_triples)}
+
+EXPANDED TRIPLES:
+{"\n".join("(" + x.subj + ", " + x.pred + ", " + x.obj + ")" for x in initial_relevant_knowledge_triples)}
+"""
+        )
         prompt_messages: list[ChatMessage] = [
             ChatMessage(role="system", content=self.system_prompt),
             ChatMessage(
@@ -570,7 +569,6 @@ are not traversed from (since these nodes occur in too many of the knowledge tri
                 ),
             ),
         ]
-        logger.debug([msg.model_dump() for msg in prompt_messages])
         llm_api_response = self.llm_client.chat.completions.create(
             model=self.llm_name,
             temperature=self.llm_temperature,
@@ -580,9 +578,11 @@ are not traversed from (since these nodes occur in too many of the knowledge tri
             role=llm_api_response.choices[0].message.role,
             content=llm_api_response.choices[0].message.content,
         )
-        logger.debug(
-            assistant_response.model_dump_json(indent=4),
-        )
+        logger.debug([
+            msg.model_dump() for msg in 
+            [*prompt_messages, assistant_response]
+        ]
+                     )
         self.recent_chat_messages.append(assistant_response)
         self.chat_history.append(
             ChatMessageDetail(
@@ -606,11 +606,19 @@ are not traversed from (since these nodes occur in too many of the knowledge tri
                 message_render_style=self.message_render_style,
             )
         )
-        logger.debug(f"proposed new knowledge triples: {proposed_new_rdf_triples}")
 
         triples_to_add: list[KnowledgeTriple] = self.dedup_knowledge_triples(
             proposed_new_rdf_triples
         )
+        logger.debug(f"""
+--NEW TRIPLES--
+Proposed:
+{"\n".join("(" + x.subj + ", " + x.pred + ", " + x.obj + ")" for x in proposed_new_rdf_triples)}
+
+After dedup:
+{"\n".join("(" + x.subj + ", " + x.pred + ", " + x.obj + ")" for x in triples_to_add)}
+"""
+                     )
 
         for triple_to_add in triples_to_add:
             self.add_knowledge_triple(triple_to_add)
