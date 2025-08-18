@@ -305,6 +305,7 @@ def main():
         atexit.register(app_cleanup)
         st.session_state.app_cleanup_registered = True
 
+    st.set_page_config(layout="wide")
     st.sidebar.title("Agent Memory Visualiser")
     selection = st.sidebar.radio("Go to", list(PAGES.keys()))
     PAGES[selection]()
