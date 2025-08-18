@@ -634,12 +634,16 @@ are not traversed from (since these nodes occur in too many of the knowledge tri
         }
 
     def custom_streamlit_plot(self) -> None:
+        """
+        Show a basic visualisation of the knowledge graph in the streamlit app
+        Note: This code written by Gemini 2.5 pro and I haven't cleaned it up yet
+        """
         G = self.graph
         if not G.nodes:
             st.info("Knowledge graph is empty.")
             return
 
-        pos = nx.spring_layout(G, seed=42, k=1.5, iterations=50)
+        pos = nx.spring_layout(G, seed=42, k=1.5, iterations=500)
 
         # Create edge trace
         edge_x, edge_y = [], []
@@ -670,10 +674,18 @@ are not traversed from (since these nodes occur in too many of the knowledge tri
             x=node_x,
             y=node_y,
             mode="markers+text",
-            hoverinfo="none",
             text=node_text,
             textposition="top center",
-            marker=dict(size=[10 + 2 * d for d in node_deg], line=dict(width=2)),
+            hoverinfo="text",
+            hovertemplate="%{text}<extra></extra>",
+            marker=dict(
+                size=[10 + 2 * d for d in node_deg],
+                line=dict(width=2),
+                color="lightblue",
+            ),
+            # The 'hovermarker' attribute is not a standard property. Highlighting on hover
+            # for individual points in a trace without callbacks is a known limitation.
+            # The change in hovermode will make elements more responsive, though.
         )
 
         # Create edge label trace
@@ -690,12 +702,34 @@ are not traversed from (since these nodes occur in too many of the knowledge tri
             y=edge_label_y,
             mode="text",
             text=edge_label_text,
-            hoverinfo="none",
+            hoverinfo="none",  # Labels themselves don't need hover info
             textfont=dict(size=10),
         )
 
+        # Create a trace for invisible markers on edges for hovering
+        edge_hover_x, edge_hover_y, edge_hover_text = [], [], []
+        for u, v, key in G.edges(keys=True):
+            x0, y0 = pos[u]
+            x1, y1 = pos[v]
+            edge_hover_x.append((x0 + x1) / 2)
+            edge_hover_y.append((y0 + y1) / 2)
+            edge_hover_text.append(f"subject: {u}<br>predicate: {key}<br>object: {v}")
+
+        edge_hover_trace = go.Scatter(
+            x=edge_hover_x,
+            y=edge_hover_y,
+            mode="markers",
+            hoverinfo="text",
+            text=edge_hover_text,
+            hovertemplate="%{text}<extra></extra>",
+            marker=dict(size=15, color="rgba(0,0,0,0)"),  # Invisible markers
+            hoverlabel=dict(bgcolor="#444444", font=dict(color="white")),
+        )
+
         # Create figure
-        fig = go.Figure(data=[edge_trace, node_trace, edge_label_trace])
+        fig = go.Figure(
+            data=[edge_trace, node_trace, edge_label_trace, edge_hover_trace]
+        )
 
         # Add arrows
         annotations = [
@@ -719,7 +753,7 @@ are not traversed from (since these nodes occur in too many of the knowledge tri
 
         fig.update_layout(
             showlegend=False,
-            hovermode=None,
+            hovermode="closest",  # Enable closest hover
             margin=dict(b=10, l=5, r=5, t=10),
             annotations=annotations,
             xaxis=dict(visible=False),
