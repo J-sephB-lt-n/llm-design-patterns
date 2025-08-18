@@ -56,12 +56,12 @@ def display_chat_history(chat_history: list[ChatMessageDetail]) -> None:
         with st.expander("Show internal chat messages", expanded=False):
             for msg in interaction.all_messages:
                 with st.chat_message(msg.role):
-                    st.markdown(msg.content)
+                    st.text(msg.content)
         with st.expander("Show token usage", expanded=False):
             st.json(interaction.token_usage)
         for msg in interaction.visible_messages:
             with st.chat_message(msg.role):
-                st.markdown(msg.content)
+                st.text(msg.content)
     st.divider()
 
 
@@ -266,7 +266,7 @@ def chat_page():
     display_chat_history(st.session_state.memory_alg.chat_history)
     if user_input := st.chat_input("Enter your response"):
         with st.chat_message("user"):
-            st.markdown(user_input)
+            st.text(user_input)
         with st.spinner():
             st.session_state.memory_alg.chat(user_msg=user_input)
         st.rerun()
