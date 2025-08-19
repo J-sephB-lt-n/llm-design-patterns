@@ -542,7 +542,7 @@ START TRIPLES:
 {"\n".join("(" + x.subj + ", " + x.pred + ", " + x.obj + ")" for x in initial_relevant_knowledge_triples)}
 
 EXPANDED TRIPLES:
-{"\n".join("(" + x.subj + ", " + x.pred + ", " + x.obj + ")" for x in initial_relevant_knowledge_triples)}
+{"\n".join("(" + x.subj + ", " + x.pred + ", " + x.obj + ")" for x in relevant_knowledge_triples)}
 """
         )
         prompt_messages: list[ChatMessage] = [
