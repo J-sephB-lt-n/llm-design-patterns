@@ -83,7 +83,7 @@ class VectorMemory(MemoryAlg):
         llm_name: str,
         llm_temperature: float,
         system_prompt: str = "You are a creative assistant helping a user to solve their problem.",
-        n_chat_messages_in_working_memory: int = 10,
+        n_chat_messages_in_working_memory: int = 8,
         n_vector_memories_to_fetch: int = 5,
         recall_query_n_chat_messages: int = 1,
         archive_n_messages_at_a_time: int = 4,

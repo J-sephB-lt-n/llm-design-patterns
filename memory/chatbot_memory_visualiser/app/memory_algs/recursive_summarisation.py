@@ -84,8 +84,8 @@ Long-Term Dialogue Memory in Large Language Models" (https://arxiv.org/abs/2308.
         llm_temperature: float,
         system_prompt: str = "You are a helpful and creative assistant conversing with a user.",
         summary_max_n_sentences: int = 20,
-        summarise_every_n_user_messages: int = 10,
-        min_n_messages_in_session_memory: int = 5,
+        summarise_every_n_user_messages: int = 4,  # only counts user messages
+        min_n_messages_in_session_memory: int = 4,  # includes assistant messages too
         messge_render_style: Literal["json_dumps", "plain_text", "xml"] = "plain_text",
     ):
         self.chat_history: list[ChatMessageDetail] = []
