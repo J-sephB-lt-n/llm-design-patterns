@@ -6,10 +6,22 @@ import asyncio
 import contextlib
 from contextvars import ContextVar
 from dataclasses import dataclass
+from itertools import batched
 
 import pydoll.browser.tab
+from markdownify import markdownify as md
 from pydoll.browser.chromium import Chrome
 from pydoll.browser.options import ChromiumOptions
+
+
+def split_text_into_pages(text: str, n_lines_per_page: int) -> list[str]:
+    """Split `text` into substrings containing `n_lines_per_page` lines of text."""
+    lines: list[str] = text.splitlines()
+    pages: list[str] = []
+    for batch in batched(lines, n=n_lines_per_page):
+        pages.append("\n".join(batch))
+
+    return pages
 
 
 @dataclass
@@ -17,9 +29,10 @@ class BrowserSessionState:
     """State of a single isolated persistent browser session."""
 
     browser_tab: pydoll.browser.tab.Tab
-    current_url: str | None = None
-    current_page_html: str | None = None
-    current_page_img_b64: str | None = None
+    url: str | None = None
+    html: str | None = None
+    text: str | None = None
+    text_paged: list[str] | None = None
 
 
 current_browser_session: ContextVar[BrowserSessionState | None] = ContextVar(
@@ -108,7 +121,7 @@ async def go_to_url(url: str) -> str:
     You must provide the full URL (including the protocol) e.g. 'https://www.example.com'
 
     Returns:
-        str: base64-encoded image of page (after navigating to it and waiting for body to load)
+        str: A status message, including the text content of the first page.
     """
     current_session = current_browser_session.get()
     if not current_session:
@@ -118,14 +131,22 @@ async def go_to_url(url: str) -> str:
     body = await current_session.browser_tab.find(tag_name="body", timeout=30)
     await body.wait_until(is_visible=True)
 
-    current_session.current_url = url
-    current_session.current_page_html = await current_session.browser_tab.page_source
-    current_session.current_page_img_b64 = (
-        await current_session.browser_tab.take_screenshot(
-            as_base64=True,
-        )
+    current_session.url = url
+    current_session.html = await current_session.browser_tab.page_source
+    current_session.text = md(current_session.html)
+    current_session.text_paged = split_text_into_pages(
+        current_session.text, n_lines_per_page=50
     )
-    return current_session.current_page_img_b64
+
+    return f"""
+Successfully navigated to page {url}
+
+For size reasons, the web page text has been split into multiple pages.
+Here is the text content of page 1 of {len(current_session.text_paged)}:
+```
+{current_session.text_paged[0]}
+```
+    """.strip()
 
 
 async def scroll_down_on_current_page():

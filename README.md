@@ -220,14 +220,12 @@ A basic example showing how to call tools using the [openai]() python library:
 uv run python -m tool_use.function_calling
 ```
 
+Some examples of AI agents using a web browser:
+
+```bash
+uv run python -m tool_use.tools.web_browser.examples.openai
+```
+
 ## Other Useful Resources
 
 - [Large Language Model Agent: A Survey on Methodology, Applications and Challenges](https://arxiv.org/abs/2503.21460)
-
-## Dev Scripts
-
-You can run all of these. They are scripts I created during dev.
-
-```bash
-uv run python -m tool_use.tools.web_browser.pydoll_api_examples.page_screenshot
-```
