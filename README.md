@@ -16,42 +16,42 @@ My main sources have been:
 
 Throughout this repo, I usually refer to Large Language Models as *LLM*s.
 
-The most fundamental rule for using LLMs effectively is to *make their scope as narrow as possible*. The more agency you give to a LLM, the more failure modes you introduce into your application. For parts of your program which can be solved without an LLM, do not use an LLM (LLMs are slow, stochastic and expensive - and they always will be).
+The most fundamental rule for using LLMs effectively is to _make their scope as narrow as possible_. The more agency you give to a LLM, the more failure modes you introduce into your application. For parts of your program which can be solved without an LLM, do not use an LLM (LLMs are slow, stochastic and expensive - and they always will be).
 
-| Contents                 |
-|--------------------------|
-| [Autonomous Agent](#autonomous-agent) |
-| [Computer Use](#computer-use) |
-| [Evaluator Optimiser (Reflection)](#evaluator-optimiser-reflection) |
-| [LLM Client](#llm-client) |
-| [Memory](#memory) | 
-| [Model Context Protocol (MCP)](#model-context-protocol-mcp) |
-| [Model Evaluation](#model-evaluation) |
-| [Multimodal Input/Output](#multimodal-inputoutput) |
-| [Orchestrator and Workers](#orchestrator-and-workers) |
-| [Parallel Processing](#parallel-processing) |
-| [PDF Question-Answering](#pdf-question-answering) |
-| [Prompt Chaining](#prompt-chaining) |
+| Contents                                                                    |
+| --------------------------------------------------------------------------- |
+| [Autonomous Agent](#autonomous-agent)                                       |
+| [Computer Use](#computer-use)                                               |
+| [Evaluator Optimiser (Reflection)](#evaluator-optimiser-reflection)         |
+| [LLM Client](#llm-client)                                                   |
+| [Memory](#memory)                                                           |
+| [Model Context Protocol (MCP)](#model-context-protocol-mcp)                 |
+| [Model Evaluation](#model-evaluation)                                       |
+| [Multimodal Input/Output](#multimodal-inputoutput)                          |
+| [Orchestrator and Workers](#orchestrator-and-workers)                       |
+| [Parallel Processing](#parallel-processing)                                 |
+| [PDF Question-Answering](#pdf-question-answering)                           |
+| [Prompt Chaining](#prompt-chaining)                                         |
 | [Retrieval-Augmented Generation (RAG)](#retrieval-augmented-generation-rag) |
-| [Routing](#routing) |
-| [Structured Outputs](#structured-outputs) |
-| [Tool Use (function-calling)](#tool-use-function-calling) |
-| [Other Useful Resources](#other-useful-resources) |
-
+| [Routing](#routing)                                                         |
+| [Structured Outputs](#structured-outputs)                                   |
+| [Tool Use (function-calling)](#tool-use-function-calling)                   |
+| [Other Useful Resources](#other-useful-resources)                           |
 
 ## Autonomous Agent
 
-There are many definitions of [LLM agent](#autonomous-agent), but the definition which is useful to me is a LLM *which has the ability to direct the control flow of the program*. The [anthropic "Building Effective Agents" blog](https://www.anthropic.com/engineering/building-effective-agents) differentiates this from a *workflow*, which is a software program with a predetermined execution path (control flow) that contains LLMs within it.
+There are many definitions of [LLM agent](#autonomous-agent), but the definition which is useful to me is a LLM _which has the ability to direct the control flow of the program_. The [anthropic "Building Effective Agents" blog](https://www.anthropic.com/engineering/building-effective-agents) differentiates this from a _workflow_, which is a software program with a predetermined execution path (control flow) that contains LLMs within it.
 
-*Agency* can also be considered along a spectrum. I this table from the [smolagents blog](https://huggingface.co/blog/smolagents):
+_Agency_ can also be considered along a spectrum. I this table from the [smolagents blog](https://huggingface.co/blog/smolagents):
 
-| Agency Level | Description                                               | How that's called   | Example Pattern                                                |
-|--------------|-----------------------------------------------------------|---------------------|----------------------------------------------------------------|
-| ☆☆☆☆          | LLM output has no impact on program flow                  | Simple processor    | `process_llm_output(llm_response)`                             |
-| ★☆☆☆          | LLM output determines basic control flow                  | Router              | `if llm_decision(): path_a() else: path_b()`                   |
-| ★★☆☆          | LLM output determines function execution                  | Tool call           | `run_function(llm_chosen_tool, llm_chosen_args)`               |
-| ★★★☆          | LLM output controls iteration and program continuation    | Multi-step Agent    | `while llm_should_continue(): execute_next_step()`             |
-| ★★★★          | One agentic workflow can start another agentic workflow  | Multi-Agent         | `if llm_trigger(): execute_agent()`                            |
+| Agency Level | Description                                             | How that's called | Example Pattern                                    |
+| ------------ | ------------------------------------------------------- | ----------------- | -------------------------------------------------- |
+| ☆☆☆☆         | LLM output has no impact on program flow                | Simple processor  | `process_llm_output(llm_response)`                 |
+| ★☆☆☆         | LLM output determines basic control flow                | Router            | `if llm_decision(): path_a() else: path_b()`       |
+| ★★☆☆         | LLM output determines function execution                | Tool call         | `run_function(llm_chosen_tool, llm_chosen_args)`   |
+| ★★★☆         | LLM output controls iteration and program continuation  | Multi-step Agent  | `while llm_should_continue(): execute_next_step()` |
+| ★★★★         | One agentic workflow can start another agentic workflow | Multi-Agent       | `if llm_trigger(): execute_agent()`                |
+
 **Source: https://huggingface.co/blog/smolagents**
 
 Agent implementations typically alternate between [tool calling](#tool-use-function-calling) (taking actions in a system) and observing the effect of those actions, continuing like this in a loop until they themselves decide to stop, or until a termination condition is reached (e.g. a predetermined cost or time threshold).
@@ -59,7 +59,7 @@ Agent implementations typically alternate between [tool calling](#tool-use-funct
 ![source: https://www.anthropic.com/engineering/building-effective-agents](./static/anthropic_agent_pattern.png)
 **source: https://www.anthropic.com/engineering/building-effective-agents**
 
-A [ReAct agent](https://arxiv.org/abs/2210.03629) (REason + ACT) is very similar, but has an additional *think* (explicit planning) step:
+A [ReAct agent](https://arxiv.org/abs/2210.03629) (REason + ACT) is very similar, but has an additional _think_ (explicit planning) step:
 
 ```mermaid
 flowchart TD
@@ -75,12 +75,11 @@ Since agents are by nature multi-step, one cannot build an agent without conside
 
 ## Computer Use
 
-There is ongoing research and innovation in the pursuit of using MultiModal LLMs to control computers directly (i.e. use computer vision on the actual GUI, and interact via keyboard and mouse instructions).  
+There is ongoing research and innovation in the pursuit of using MultiModal LLMs to control computers directly (i.e. use computer vision on the actual GUI, and interact via keyboard and mouse instructions).
 
 I haven't explored this area much, but here are some python libraries which I am aware of:
 
 - https://github.com/browser-use/browser-use (LLM can navigate freely in your local web browser)
-
 
 ## Evaluator Optimiser (Reflection)
 
@@ -106,15 +105,15 @@ The most straightforward way to do this is to keep a full history of the convers
 
 There are various different approaches to manual memory management. Here is very non-exhaustive list of options (this remains an area of active research):
 
-| Approach       | Description                    |
-|----------------|--------------------------------|
-| Sliding window | Only keep the last X most recent messages (or tokens) and include these in the input prompt each time|.
-| Periodic Summarisation | Every time the chat history gets X messages (or tokens) long, reduce it's size by using the LLM to summarise it (could be summarised at every step). Include the summarised history in the input prompt each time |
+| Approach                | Description                                                                                                                                                                                                                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| Sliding window          | Only keep the last X most recent messages (or tokens) and include these in the input prompt each time                                                                                                                                                                        | .   |
+| Periodic Summarisation  | Every time the chat history gets X messages (or tokens) long, reduce it's size by using the LLM to summarise it (could be summarised at every step). Include the summarised history in the input prompt each time                                                            |
 | External messages store | Store the conversation history in an external system (e.g. vector database) and fetch the most relevant messages each time (insert them into the input prompt). There are many ways to measure relevance (vector similarity, recency, LLM-assigned memory importance rating) |
-| Hybrid | Any combination of the previously mentioned memory approaches (e.g. both a sliding window of most recent messages and an external vector database containing long-term memories) | 
-| MemGPT | |
-| mem0 | |
-| zep | |
+| Hybrid                  | Any combination of the previously mentioned memory approaches (e.g. both a sliding window of most recent messages and an external vector database containing long-term memories)                                                                                             |
+| MemGPT                  |                                                                                                                                                                                                                                                                              |
+| mem0                    |                                                                                                                                                                                                                                                                              |
+| zep                     |                                                                                                                                                                                                                                                                              |
 
 Another approach which I've found to be highly effective is to design the user/LLM application interface specifically around NOT USING MEMORY i.e. make the chatbot "1-shot", and if the user wants something slightly different they can just modify their input prompt and have another go on a fresh LLM.
 
@@ -157,11 +156,12 @@ PYTHONPATH=. uv run streamlit run pdf_question_answering/using_page_images_app.p
 
 ## Prompt Chaining
 
-*Prompt Chaining* refers to sequential LLM calls, where the output of one feeds into the prompt of the next.
+_Prompt Chaining_ refers to sequential LLM calls, where the output of one feeds into the prompt of the next.
 
 ![source: https://www.anthropic.com/engineering/building-effective-agents](./static/anthropic_prompt_chaining.png)
 
 Here is a simple 2-step example:
+
 ```bash
 uv run python -m prompt_chaining.step_back_prompting_example
 ```
@@ -184,7 +184,7 @@ TODO
 
 ## Structured Outputs
 
-*Structured Outputs* refers to getting the LLM to return data with a specific structure/schema. LLMs, by their very nature, return unstructured text.
+_Structured Outputs_ refers to getting the LLM to return data with a specific structure/schema. LLMs, by their very nature, return unstructured text.
 
 This typically means returning JSON with a specific structure (and data types).
 
@@ -214,6 +214,8 @@ uv run streamlit run rag/chonkie_visualiser_app.py
 
 ## Tool Use (function-calling)
 
+A basic example showing how to call tools using the [openai]() python library:
+
 ```bash
 uv run python -m tool_use.function_calling
 ```
@@ -221,3 +223,11 @@ uv run python -m tool_use.function_calling
 ## Other Useful Resources
 
 - [Large Language Model Agent: A Survey on Methodology, Applications and Challenges](https://arxiv.org/abs/2503.21460)
+
+## Dev Scripts
+
+You can run all of these. They are scripts I created during dev.
+
+```bash
+uv run python -m tool_use.tools.web_browser.pydoll_api_examples.page_screenshot
+```

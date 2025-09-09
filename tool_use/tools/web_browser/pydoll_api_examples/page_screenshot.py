@@ -3,15 +3,17 @@ Example of navigating to a URL and taking a screenshot of the page using [pydoll
 """
 
 import asyncio
+import base64
 import warnings
 
 from pydoll.browser.chromium import Chrome
 from pydoll.browser.options import ChromiumOptions
 
+from utils.image import prep_image_for_llm
+
 
 async def go_to_url_and_screenshot(
     url: str,
-    output_path: str = "temp_page_screenshot.png",
 ):
     """
     Navigate to `url`, take a screenshot and save the image to local file `output_path`.
@@ -37,11 +39,24 @@ async def go_to_url_and_screenshot(
         print("Screenshot as base64:", screenshot_b64[:100], "...")
 
         # or you can save the screenshot to a file #
+        output_path: str = "temp_webpage_screenshot.png"
         await tab.take_screenshot(
             path=output_path,
             # beyond_viewport=True,  # include entire page
         )
         print(f"Screenshot saved to: {output_path}")
+
+        # save processed file #
+        processed_screenshot_b64: str = prep_image_for_llm(
+            img_b64=screenshot_b64,
+            to_grayscale=True,
+            increase_contrast=True,
+            target_width=400,
+        )
+        output_path: str = "temp_processed_webpage_screenshot.png"
+        with open(output_path, "wb") as file:
+            file.write(base64.b64decode(processed_screenshot_b64))
+        print(f"Processed screenshot written to {output_path}")
 
 
 if __name__ == "__main__":
