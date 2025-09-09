@@ -51,7 +51,7 @@ async def go_to_url_and_screenshot(
             img_b64=screenshot_b64,
             to_grayscale=True,
             increase_contrast=True,
-            target_width=400,
+            target_width=1_000,
         )
         output_path: str = "temp_processed_webpage_screenshot.png"
         with open(output_path, "wb") as file:
