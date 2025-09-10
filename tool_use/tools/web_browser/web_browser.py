@@ -4,6 +4,7 @@ Tools which an AI agent can use to browse the web.
 
 import asyncio
 import contextlib
+import re
 from contextvars import ContextVar
 from dataclasses import dataclass
 from itertools import batched
@@ -133,7 +134,12 @@ async def go_to_url(url: str) -> str:
 
     current_session.url = url
     current_session.html = await current_session.browser_tab.page_source
-    current_session.text = md(current_session.html)
+    # replace multiple blank lines with a single blank line #
+    current_session.text = re.sub(
+        r"(\n\s*){2,}",
+        r"\n\n",
+        md(current_session.html).strip(),  # html -> markdown
+    )
     current_session.text_paged = split_text_into_pages(
         current_session.text, n_lines_per_page=50
     )
