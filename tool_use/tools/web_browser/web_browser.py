@@ -121,7 +121,7 @@ async def go_to_url(url: str) -> str:
     You must provide the full URL (including the protocol) e.g. 'https://www.example.com'
 
     Returns:
-        str: A status message, including the text content of the first page.
+        str: A status message, including the text content of the first section.
     """
     current_session = current_browser_session.get()
     if not current_session:
@@ -139,18 +139,50 @@ async def go_to_url(url: str) -> str:
     )
 
     return f"""
-Successfully navigated to page {url}
+Successfully navigated to web page {url}
 
-For size reasons, the web page text has been split into multiple pages.
-Here is the text content of page 1 of {len(current_session.text_paged)}:
+For size reasons, the web page text has been split into multiple sections.
+Here is the text content of section 1 of {len(current_session.text_paged)}:
 ```
 {current_session.text_paged[0]}
 ```
     """.strip()
 
 
-async def scroll_down_on_current_page():
-    raise NotImplementedError
+async def view_section(section_num: int) -> str:
+    """
+    For size reasons, the full web page text has been partitioned.
+    Use this function to view a specific one of the partitions.
+
+    Args:
+        section_num (int): Number (identifier) of partition to view (the first partition is `1`).
+
+    Returns:
+        str: The text content of the partition.
+    """
+    current_session = current_browser_session.get()
+    if not current_session:
+        raise RuntimeError("No active browser session.")
+    if current_session.url is None:
+        return "Please navigate to a URL first."
+    if section_num < 0 or section_num > len(current_session.text_paged):
+        return (
+            "Invalid section choice. "
+            f"Please choose a value between 1 and {len(current_session.text_paged)}"
+        )
+
+    return f"""
+Text content of section {section_num} of web page {current_session.url}:
+```
+{current_session.text_paged[section_num]}
+```
+""".strip()
+
+
+async def text_search(regex_pattern: str) -> list[str]:
+    """
+    Finds all pages
+    """
 
 
 async def search_current_page_hyperlinks(link_text_contains: str) -> list[str]:
