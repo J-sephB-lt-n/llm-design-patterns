@@ -220,6 +220,12 @@ A basic example showing how to call tools using the [openai]() python library:
 uv run python -m tool_use.function_calling
 ```
 
+Manually explore the web browsing functions available to an AI agent:
+
+```bash
+uv run python -m tool_use.tools.web_browser.examples.manual_tool_exploration
+```
+
 Some examples of AI agents using a web browser:
 
 ```bash
