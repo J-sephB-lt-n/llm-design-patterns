@@ -13,12 +13,14 @@ import questionary
 from tool_use.tools.web_browser import (
     BrowserManager,
     go_to_url,
+    text_search,
     view_section,
     WebBrowser,
 )
 
 AGENT_TOOLS: Final[dict[str, Callable]] = {
     "go_to_url": go_to_url,
+    "text_search": text_search,
     "view_section": view_section,
 }
 
