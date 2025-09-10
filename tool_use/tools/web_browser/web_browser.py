@@ -158,7 +158,7 @@ Here is the text content of section 1 of {len(current_session.text_paged)}:
 async def view_section(section_num: int) -> str:
     """
     For size reasons, the full web page text has been partitioned.
-    Use this function to view a specific one of the partitions.
+    Use this function to view a specific one of the partitions (sections).
 
     Args:
         section_num (int): Number (identifier) of partition to view (the first partition is `1`).
@@ -185,10 +185,38 @@ Text content of section {section_num} of web page {current_session.url}:
 """.strip()
 
 
-async def text_search(regex_pattern: str) -> list[str]:
+async def text_search(regex_pattern: str, ignore_case: bool = True) -> str:
     """
-    Finds all pages
+    Finds all sections (partitions) matching `regex_pattern`.
+
+    Args:
+        regex_pattern (str): The regex pattern to search for.
+        ignore_case (bool): Whether to perform a case-insensitive search.
     """
+    match_sections: list[int] = []
+    current_session = current_browser_session.get()
+    if not current_session:
+        raise RuntimeError("No active browser session.")
+    if current_session.url is None:
+        return "Please navigate to a URL first."
+
+    flags = re.DOTALL
+    if ignore_case:
+        flags |= re.IGNORECASE
+
+    for section_num, section_text in enumerate(current_session.text_paged, start=1):
+        if re.search(regex_pattern, section_text, flags):
+            match_sections.append(section_num)
+
+    if not match_sections:
+        return (
+            f"No matches found for regex pattern '{regex_pattern}' in any section text."
+        )
+
+    return f"""
+The following sections contained text matching regex pattern '{regex_pattern}':
+{"\n".join(" - section " + str(section_num) for section_num in match_sections)}
+    """.strip()
 
 
 async def search_current_page_hyperlinks(link_text_contains: str) -> list[str]:
