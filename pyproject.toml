@@ -9,11 +9,11 @@ maintainers = [
   { name = "Joseph Bolton", email = "joseph.jazz.bolton@gmail.com" },
 ]
 dependencies = [
-    "loguru>=0.7.3",
-    "openai>=1.82.0",
-    "pydantic>=2.11.5",
-    "pytest>=8.4.1",
-    "python-dotenv>=1.1.0",
+  "loguru>=0.7.3",
+  "openai>=1.82.0",
+  "pydantic>=2.11.5",
+  "pytest>=8.4.1",
+  "python-dotenv>=1.1.0",
 ]
 
 [dependency-groups]
@@ -30,6 +30,8 @@ members = [
   "memory",
   "rag",
   "structured_outputs",
-  "tool_use",
-  "mcp/custom_mcp_server", "memory/chatbot_memory_visualiser", "evals/using_pytest", "pdf_question_answering",
+  "mcp/custom_mcp_server",
+  "memory/chatbot_memory_visualiser",
+  "evals/using_pytest",
+  "pdf_question_answering", "tool_use/tools/web_browser",
 ]
