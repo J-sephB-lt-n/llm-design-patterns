@@ -165,7 +165,7 @@ async def view_section(section_num: int) -> str:
         raise RuntimeError("No active browser session.")
     if current_session.url is None:
         return "Please navigate to a URL first."
-    if section_num < 0 or section_num > len(current_session.text_paged):
+    if section_num < 1 or section_num > len(current_session.text_paged):
         return (
             "Invalid section choice. "
             f"Please choose a value between 1 and {len(current_session.text_paged)}"
@@ -174,7 +174,7 @@ async def view_section(section_num: int) -> str:
     return f"""
 Text content of section {section_num} of web page {current_session.url}:
 ```
-{current_session.text_paged[section_num]}
+{current_session.text_paged[section_num-1]}
 ```
 """.strip()
 
