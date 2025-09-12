@@ -14,6 +14,7 @@ import pydoll.browser.tab
 from markdownify import MarkdownConverter, markdownify
 from pydoll.browser.chromium import Chrome
 from pydoll.browser.options import ChromiumOptions
+from pydoll.constants import Key
 from pydoll.exceptions import PydollException
 
 
@@ -297,7 +298,6 @@ Available tag_id values are:
 
     try:
         css_selector: str = f"{tag_type}:nth-of-type({tag_num})"
-        print(css_selector)
         element = await current_session.browser_tab.query(css_selector)
         await element.wait_until(is_interactable=True, timeout=10)
         await element.insert_text(text_to_enter)
@@ -310,6 +310,42 @@ Failed to enter text into `{tag_id}`. Error was:
         """
     else:
         return f"Successfully entered text '{text_to_enter}' into {tag_type} text input with id '{tag_id}'"
+
+
+async def press_enter_key(tag_id: str) -> str:
+    """Press the enter key while focused on element with ID `tag_id`."""
+    current_session = current_browser_session.get()
+    if not current_session:
+        raise RuntimeError("No active browser session.")
+    if current_session.url is None:
+        return "Please navigate to a URL first."
+
+    if tag_id not in current_session.tag_ids:
+        return f"""
+Invalid tag_id '{ tag_id }'
+Available tag_id values are:
+{"\n".join("    - " + x for x in current_session.tag_ids)}
+"""
+
+    tag_type, tag_num = tag_id.split("_")
+
+    try:
+        css_selector: str = f"{tag_type}:nth-of-type({tag_num})"
+        element = await current_session.browser_tab.query(css_selector)
+        await element.wait_until(is_interactable=True, timeout=10)
+        await element.press_keyboard_key(Key.ENTER)
+    except PydollException as pydoll_error:
+        return f"""
+Failed to enter text into `{tag_id}`. Error was:
+```
+{pydoll_error}
+```
+        """
+    else:
+        current_url: str = await current_session.browser_tab.current_url
+        if current_url != current_session.url:
+            return "url changed"
+        return "url stayed the same"
 
 
 async def search_current_page_hyperlinks(link_text_contains: str) -> list[str]:
