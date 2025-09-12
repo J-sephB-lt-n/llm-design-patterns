@@ -238,7 +238,8 @@ async def view_section(section_num: int) -> str:
         )
 
     return f"""
-Text content of section {section_num} of web page {current_session.url}:
+Text content of section {section_num} (of {len(current_session.text_paged):,}) \
+of web page {current_session.url}:
 ```
 {current_session.text_paged[section_num-1]}
 ```
@@ -344,8 +345,23 @@ Failed to enter text into `{tag_id}`. Error was:
     else:
         current_url: str = await current_session.browser_tab.current_url
         if current_url != current_session.url:
-            return "url changed"
-        return "url stayed the same"
+            await refresh_page_view(current_session)
+            return f"""
+Successfully pressed enter key on element with ID '{tag_id}'.
+This resulted in a page redirection, and the current URL is now {current_session.url}.
+
+For size reasons, the web page text has been split into multiple sections.
+Here is the text content of section 1 of {len(current_session.text_paged)}:
+```
+{current_session.text_paged[0]}
+```
+""".strip()
+        else:
+            return (
+                f"Successfully pressed enter key on element with ID '{tag_id}'. "
+                "If you expected this to result in a page content update, then see the latest state of "
+                "the page using the view_section() tool."
+            )
 
 
 async def search_current_page_hyperlinks(link_text_contains: str) -> list[str]:
