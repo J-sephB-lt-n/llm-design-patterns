@@ -4,13 +4,14 @@ Tools which an AI agent can use to browse the web.
 
 import asyncio
 import contextlib
+import itertools
 import re
 from contextvars import ContextVar
 from dataclasses import dataclass
 from itertools import batched
 
 import pydoll.browser.tab
-from markdownify import markdownify as md
+from markdownify import MarkdownConverter, markdownify
 from pydoll.browser.chromium import Chrome
 from pydoll.browser.options import ChromiumOptions
 
@@ -30,10 +31,11 @@ class BrowserSessionState:
     """State of a single isolated persistent browser session."""
 
     browser_tab: pydoll.browser.tab.Tab
-    url: str | None = None
-    html: str | None = None
-    text: str | None = None
-    text_paged: list[str] | None = None
+    url: str | None = None  # current url
+    html: str | None = None  # HTML of current page
+    text: str | None = None  # text of current page
+    text_paged: list[str] | None = None  # text of current page partitioned into chunks
+    tag_counters: dict[str, itertools.count] | None = None
 
 
 current_browser_session: ContextVar[BrowserSessionState | None] = ContextVar(
@@ -116,6 +118,35 @@ class WebBrowser:
             current_browser_session.reset(token)
 
 
+class CustomMarkdownConverter(MarkdownConverter):
+    """
+    Makes markdownify render specific HTML tags in a custom way.
+    I'm using it to highlight interactable elements (e.g. buttons, text inputs) each with a
+    unique ID which the agent can use to interact with them.
+    """
+
+    def __init__(self, **options) -> None:
+        super().__init__(**options)
+
+        self.tag_counters = options["tag_counters"]
+
+    def convert_textarea(self, el, text, parent_tags) -> str:
+        """Custom markdown rendering of <textarea> tags."""
+        return f"""
+<textarea> [id=textarea{next(self.tag_counters["textarea"])}]
+```
+{ text }
+```
+        """.strip()
+
+
+def markdownify_custom(html: str, **options) -> str:
+    """
+    TODO.
+    """
+    return CustomMarkdownConverter(**options).convert(html)
+
+
 async def go_to_url(url: str) -> str:
     """
     Navigate to a URL in the current browser session.
@@ -132,13 +163,20 @@ async def go_to_url(url: str) -> str:
     body = await current_session.browser_tab.find(tag_name="body", timeout=30)
     await body.wait_until(is_visible=True)
 
+    current_session.tag_counters = {
+        "input": itertools.count(start=1),
+        "textarea": itertools.count(start=1),
+    }
+
     current_session.url = url
     current_session.html = await current_session.browser_tab.page_source
     # replace multiple blank lines with a single blank line #
     current_session.text = re.sub(
         r"(\n\s*){2,}",
         r"\n\n",
-        md(current_session.html).strip(),  # html -> markdown
+        markdownify_custom(
+            current_session.html, tag_counters=current_session.tag_counters
+        ).strip(),
     )
     current_session.text_paged = split_text_into_pages(
         current_session.text, n_lines_per_page=50
