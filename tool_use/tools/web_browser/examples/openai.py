@@ -20,18 +20,19 @@ from tool_use.tools.web_browser import (
 from utils import func_defn_as_json_schema
 
 AGENT_TASKS: Final[list[str]] = [
-    (
-        "Go to https://en.wikipedia.org/wiki/List_of_serial_killers_by_number_of_victims, "
-        "navigate to one of the URLs you see on that page and succinctly summarise the content "
-        "of that page in a short bulleted list. Just choose a random one."
-    ),
-    "Go to hacker news, navigate to the 4th highest post and summarise it's content.",
+    # (
+    #     "Go to https://en.wikipedia.org/wiki/List_of_serial_killers_by_number_of_victims, "
+    #     "navigate to one of the URLs you see on that page and succinctly summarise the content "
+    #     "of that page in a short bulleted list. Just choose a random one."
+    # ),
+    # "Go to hacker news, navigate to the 4th highest post and summarise it's content.",
     (
         "Go to hacker news, find me a post about memory (if there are multiple just choose one), "
         "give me the URL, go to the linked article "
         "and summarise the content for me. You may have to check the first few pages of hacker "
         "news."
     ),
+    # "Go to companies house UK and find me contact phone numbers for EPSILON HEAT TRANSFER",
 ]
 AGENT_TOOLS: Final[dict[str, Callable]] = {
     "go_to_url": go_to_url,

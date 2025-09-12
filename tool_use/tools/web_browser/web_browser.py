@@ -14,6 +14,7 @@ import pydoll.browser.tab
 from markdownify import MarkdownConverter, markdownify
 from pydoll.browser.chromium import Chrome
 from pydoll.browser.options import ChromiumOptions
+from pydoll.exceptions import PydollException
 
 
 def split_text_into_pages(text: str, n_lines_per_page: int) -> list[str]:
@@ -36,6 +37,7 @@ class BrowserSessionState:
     text: str | None = None  # text of current page
     text_paged: list[str] | None = None  # text of current page partitioned into chunks
     tag_counters: dict[str, itertools.count] | None = None
+    tag_ids: list[str] | None = None
 
 
 current_browser_session: ContextVar[BrowserSessionState | None] = ContextVar(
@@ -129,11 +131,14 @@ class CustomMarkdownConverter(MarkdownConverter):
         super().__init__(**options)
 
         self.tag_counters = options["tag_counters"]
+        self.tag_ids = options["tag_ids"]
 
     def convert_textarea(self, el, text, parent_tags) -> str:
         """Custom markdown rendering of <textarea> tags."""
+        new_tag_id: str = f'textarea_{next(self.tag_counters["textarea"])}'
+        self.tag_ids.append(new_tag_id)
         return f"""
-<textarea> [id=textarea{next(self.tag_counters["textarea"])}]
+<textarea> [id={new_tag_id}]
 ```
 { text }
 ```
@@ -142,9 +147,39 @@ class CustomMarkdownConverter(MarkdownConverter):
 
 def markdownify_custom(html: str, **options) -> str:
     """
-    TODO.
+    Convert `html` to a markdown string using CustomMarkdownConverter.
     """
     return CustomMarkdownConverter(**options).convert(html)
+
+
+async def refresh_page_view(current_session: BrowserSessionState) -> None:
+    """
+    Update the text representations of the current webpage to reflect the
+    actual page state.
+    """
+    current_session.tag_counters = {
+        "input": itertools.count(start=1),
+        "textarea": itertools.count(start=1),
+    }
+    current_session.tag_ids = []
+    current_session.url = await current_session.browser_tab.current_url
+    current_session.html = await current_session.browser_tab.page_source
+    # replace multiple blank lines with a single blank line #
+    current_session.text = re.sub(
+        r"(\n\s*){2,}",
+        r"\n\n",
+        markdownify_custom(
+            current_session.html,
+            tag_counters=current_session.tag_counters,
+            tag_ids=current_session.tag_ids,
+        ).strip(),
+    )
+    current_session.text_paged = split_text_into_pages(
+        current_session.text, n_lines_per_page=50
+    )
+
+    print(current_session.tag_counters)
+    print(current_session.tag_ids)
 
 
 async def go_to_url(url: str) -> str:
@@ -163,24 +198,7 @@ async def go_to_url(url: str) -> str:
     body = await current_session.browser_tab.find(tag_name="body", timeout=30)
     await body.wait_until(is_visible=True)
 
-    current_session.tag_counters = {
-        "input": itertools.count(start=1),
-        "textarea": itertools.count(start=1),
-    }
-
-    current_session.url = url
-    current_session.html = await current_session.browser_tab.page_source
-    # replace multiple blank lines with a single blank line #
-    current_session.text = re.sub(
-        r"(\n\s*){2,}",
-        r"\n\n",
-        markdownify_custom(
-            current_session.html, tag_counters=current_session.tag_counters
-        ).strip(),
-    )
-    current_session.text_paged = split_text_into_pages(
-        current_session.text, n_lines_per_page=50
-    )
+    await refresh_page_view(current_session)
 
     return f"""
 Successfully navigated to web page {url}
@@ -205,6 +223,9 @@ async def view_section(section_num: int) -> str:
         str: The text content of the partition.
     """
     current_session = current_browser_session.get()
+
+    await refresh_page_view(current_session)
+
     if not current_session:
         raise RuntimeError("No active browser session.")
     if current_session.url is None:
@@ -255,6 +276,40 @@ async def text_search(regex_pattern: str, ignore_case: bool = True) -> str:
 The following sections contained text matching regex pattern '{regex_pattern}':
 {"\n".join(" - section " + str(section_num) for section_num in match_sections)}
     """.strip()
+
+
+async def enter_text_into_textbox(tag_id: str, text_to_enter: str) -> str:
+    """Enter `text_to_enter` into a textarea or input element identified by `tag_id`."""
+    current_session = current_browser_session.get()
+    if not current_session:
+        raise RuntimeError("No active browser session.")
+    if current_session.url is None:
+        return "Please navigate to a URL first."
+
+    if tag_id not in current_session.tag_ids:
+        return f"""
+Invalid tag_id '{ tag_id }'
+Available tag_id values are:
+{"\n".join("    - " + x for x in current_session.tag_ids)}
+"""
+
+    tag_type, tag_num = tag_id.split("_")
+
+    try:
+        css_selector: str = f"{tag_type}:nth-of-type({tag_num})"
+        print(css_selector)
+        element = await current_session.browser_tab.query(css_selector)
+        await element.wait_until(is_interactable=True, timeout=10)
+        await element.insert_text(text_to_enter)
+    except PydollException as pydoll_error:
+        return f"""
+Failed to enter text into `{tag_id}`. Error was:
+```
+{pydoll_error}
+```
+        """
+    else:
+        return f"Successfully entered text '{text_to_enter}' into {tag_type} text input with id '{tag_id}'"
 
 
 async def search_current_page_hyperlinks(link_text_contains: str) -> list[str]:
