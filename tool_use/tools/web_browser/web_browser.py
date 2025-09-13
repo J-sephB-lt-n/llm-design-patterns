@@ -128,17 +128,44 @@ class CustomMarkdownConverter(MarkdownConverter):
     I'm using it to highlight interactable elements (e.g. buttons, text inputs) each with a
     unique ID which the agent can use to interact with them.
     """
+
     ATTRIBUTES_TO_INCLUDE = {
-    'a': ['title', 'target', 'rel', 'download'],
-    'button': ['name', 'value', 'type', 'disabled'],
-    'input': ['type', 'name', 'value', 'placeholder', 'checked', 'disabled', 'readonly', 'required'],
-    'textarea': ['name', 'placeholder', 'rows', 'cols', 'disabled', 'readonly', 'required'],
-    'select': ['name', 'multiple', 'disabled'],
-    'option': ['value', 'selected'],
-    'img': ['alt', 'src', 'title'],
-    'iframe': ['src', 'title'],
-    # Global attributes (can apply to many tags)
-    '*': ['id', 'title', 'role', 'aria-hidden', 'aria-label', 'aria-expanded', 'aria-current', 'aria-haspopup']
+        "a": ["title", "target", "rel", "download"],
+        "button": ["name", "value", "type", "disabled"],
+        "input": [
+            "type",
+            "name",
+            "value",
+            "placeholder",
+            "checked",
+            "disabled",
+            "readonly",
+            "required",
+        ],
+        "textarea": [
+            "name",
+            "placeholder",
+            "rows",
+            "cols",
+            "disabled",
+            "readonly",
+            "required",
+        ],
+        "select": ["name", "multiple", "disabled"],
+        "option": ["value", "selected"],
+        "img": ["alt", "src", "title"],
+        "iframe": ["src", "title"],
+        # Global attributes (can apply to many tags)
+        "*": [
+            "id",
+            "title",
+            "role",
+            "aria-hidden",
+            "aria-label",
+            "aria-expanded",
+            "aria-current",
+            "aria-haspopup",
+        ],
     }
 
     def __init__(self, **options) -> None:
@@ -146,6 +173,14 @@ class CustomMarkdownConverter(MarkdownConverter):
 
         self.tag_counters = options["tag_counters"]
         self.tag_ids = options["tag_ids"]
+
+    def convert_img(self, el, text, parent_tags) -> str:
+        """Custom markdown rendering of <img> tags."""
+        src = el.get("src", "")
+        if src.startswith("data:image"):
+            return ""
+
+        return super().convert_img(el, text, parent_tags)
 
     def convert_input(self, el, text, parent_tags) -> str:
         """Custom markdown rendering of <input> tags."""
@@ -189,7 +224,7 @@ class CustomMarkdownConverter(MarkdownConverter):
             attributes_to_render.append(f'text="{cleaned_text}"')
 
         attributes_str = " ".join(attributes_to_render)
-        return f"<button> [{attributes_str}] [id={new_tag_id}]"
+        return f"<button id={new_tag_id} {attributes_str}>"
 
 
 def markdownify_custom(html: str, **options) -> str:
@@ -360,6 +395,7 @@ Failed to enter text into `{tag_id}`. Error was:
     else:
         return f"Successfully entered text '{text_to_enter}' into {tag_type} text input with ID '{tag_id}'"
 
+
 async def click_button(tag_id: str) -> str:
     """Click button with tag ID `tag_id`."""
     current_session = current_browser_session.get()
@@ -395,6 +431,7 @@ Failed to click button with ID `{tag_id}`. Error was:
         """
     else:
         return f"Successfully clicked button with ID '{tag_id}'"
+
 
 async def press_enter_key(tag_id: str) -> str:
     """Press the enter key while focused on element with ID `tag_id`."""
