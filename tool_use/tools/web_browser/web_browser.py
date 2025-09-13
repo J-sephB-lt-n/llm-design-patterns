@@ -152,6 +152,12 @@ class CustomMarkdownConverter(MarkdownConverter):
 ```
         """.strip()
 
+    def convert_button(self, el, text, parent_tags) -> str:
+        """Custom markdown rendering of <button> tags."""
+        new_tag_id: str = f'button_{next(self.tag_counters["button"])}'
+        self.tag_ids.append(new_tag_id)
+        return f"<button> [{text}] [id={new_tag_id}]"
+
 
 def markdownify_custom(html: str, **options) -> str:
     """
@@ -168,6 +174,7 @@ async def refresh_page_view(current_session: BrowserSessionState) -> None:
     current_session.tag_counters = {
         "input": itertools.count(start=1),
         "textarea": itertools.count(start=1),
+        "button": itertools.count(start=1),
     }
     current_session.tag_ids = []
     current_session.url = await current_session.browser_tab.current_url
@@ -309,9 +316,7 @@ Available tag_id values are:
 
         element = elements[tag_num - 1]
         await element.wait_until(is_interactable=True, timeout=10)
-        for char in text_to_enter:
-            await element.insert_text(char)
-            await asyncio.sleep(random.uniform(0.2, 1.0))
+        await element.type_text(text_to_enter, interval=0.3)
     except PydollException as pydoll_error:
         return f"""
 Failed to enter text into `{tag_id}`. Error was:
@@ -322,6 +327,41 @@ Failed to enter text into `{tag_id}`. Error was:
     else:
         return f"Successfully entered text '{text_to_enter}' into {tag_type} text input with ID '{tag_id}'"
 
+async def click_button(tag_id: str) -> str:
+    """Click button with tag ID `tag_id`."""
+    current_session = current_browser_session.get()
+    if not current_session:
+        raise RuntimeError("No active browser session.")
+    if current_session.url is None:
+        return "Please navigate to a URL first."
+
+    if tag_id not in current_session.tag_ids:
+        return f"""
+Invalid tag_id '{ tag_id }'
+Available tag_id values are:
+{"\n".join("    - " + x for x in current_session.tag_ids)}
+"""
+
+    tag_type, tag_num = tag_id.split("_")
+    tag_num = int(tag_num)
+
+    try:
+        elements = await current_session.browser_tab.find(
+            tag_name=tag_type, find_all=True
+        )
+
+        element = elements[tag_num - 1]
+        await element.wait_until(is_interactable=True, timeout=10)
+        await element.click()
+    except PydollException as pydoll_error:
+        return f"""
+Failed to click button with ID `{tag_id}`. Error was:
+```
+{pydoll_error}
+```
+        """
+    else:
+        return f"Successfully clicked button with ID '{tag_id}'"
 
 async def press_enter_key(tag_id: str) -> str:
     """Press the enter key while focused on element with ID `tag_id`."""
@@ -348,7 +388,7 @@ Available tag_id values are:
 
         element = elements[tag_num - 1]
         await element.wait_until(is_interactable=True, timeout=10)
-        await element.press_keyboard_key(Key.ENTER)
+        await element.press_keyboard_key(Key.ENTER, interval=0.1)
     except PydollException as pydoll_error:
         return f"""
 Failed to enter text into `{tag_id}`. Error was:

@@ -12,6 +12,7 @@ import questionary
 
 from tool_use.tools.web_browser import (
     BrowserManager,
+    click_button,
     enter_text_into_textbox,
     go_to_url,
     press_enter_key,
@@ -21,6 +22,7 @@ from tool_use.tools.web_browser import (
 )
 
 AGENT_TOOLS: Final[dict[str, Callable]] = {
+    "click_button": click_button,
     "enter_text_into_textbox": enter_text_into_textbox,
     "go_to_url": go_to_url,
     "press_enter_key": press_enter_key,
