@@ -5,6 +5,7 @@ Tools which an AI agent can use to browse the web.
 import asyncio
 import contextlib
 import itertools
+import random
 import re
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -302,15 +303,15 @@ Available tag_id values are:
     tag_num = int(tag_num)
 
     try:
-        # css_selector: str = f"{tag_type}:nth-of-type({tag_num})"
-        # element = await current_session.browser_tab.query(css_selector)
         elements = await current_session.browser_tab.find(
             tag_name=tag_type, find_all=True
         )
 
         element = elements[tag_num - 1]
         await element.wait_until(is_interactable=True, timeout=10)
-        await element.insert_text(text_to_enter)
+        for char in text_to_enter:
+            await element.insert_text(char)
+            await asyncio.sleep(random.uniform(0.2, 1.0))
     except PydollException as pydoll_error:
         return f"""
 Failed to enter text into `{tag_id}`. Error was:
@@ -319,7 +320,7 @@ Failed to enter text into `{tag_id}`. Error was:
 ```
         """
     else:
-        return f"Successfully entered text '{text_to_enter}' into {tag_type} text input with id '{tag_id}'"
+        return f"Successfully entered text '{text_to_enter}' into {tag_type} text input with ID '{tag_id}'"
 
 
 async def press_enter_key(tag_id: str) -> str:
@@ -341,8 +342,6 @@ Available tag_id values are:
     tag_num = int(tag_num)
 
     try:
-        # css_selector: str = f"{tag_type}:nth-of-type({tag_num})"
-        # element = await current_session.browser_tab.query(css_selector)
         elements = await current_session.browser_tab.find(
             tag_name=tag_type, find_all=True
         )
