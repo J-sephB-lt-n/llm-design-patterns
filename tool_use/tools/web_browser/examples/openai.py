@@ -13,32 +13,41 @@ import openai
 
 from tool_use.tools.web_browser import (
     BrowserManager,
+    enter_text_into_textbox,
     go_to_url,
+    press_enter_key,
     text_search,
     WebBrowser,
 )
 from utils import func_defn_as_json_schema
 
 AGENT_TASKS: Final[list[str]] = [
+    (
+        "Please find me the company number of the company Stubben Edge UK. "
+        "Answer this question using the web browsing tools provided to you. "
+        "Start at ask.com"
+    ),
     # (
     #     "Go to https://en.wikipedia.org/wiki/List_of_serial_killers_by_number_of_victims, "
     #     "navigate to one of the URLs you see on that page and succinctly summarise the content "
     #     "of that page in a short bulleted list. Just choose a random one."
     # ),
     # "Go to hacker news, navigate to the 4th highest post and summarise it's content.",
-    (
-        "Go to hacker news, find me a post about memory (if there are multiple just choose one), "
-        "give me the URL, go to the linked article "
-        "and summarise the content for me. You may have to check the first few pages of hacker "
-        "news."
-    ),
+    # (
+    #     "Go to hacker news, find me a post about memory (if there are multiple just choose one), "
+    #     "give me the URL, go to the linked article "
+    #     "and summarise the content for me. You may have to check the first few pages of hacker "
+    #     "news."
+    # ),
     # "Go to companies house UK and find me contact phone numbers for EPSILON HEAT TRANSFER",
 ]
 AGENT_TOOLS: Final[dict[str, Callable]] = {
+    "enter_text_into_textbox": enter_text_into_textbox,
     "go_to_url": go_to_url,
+    "press_enter_key": press_enter_key,
     "text_search": text_search,
 }
-MAX_N_AGENT_LOOPS: Final[int] = 5
+MAX_N_AGENT_LOOPS: Final[int] = 10
 
 print(
     f'Attempting to load credentials from .env file. success={dotenv.load_dotenv(".env")}'
@@ -67,14 +76,12 @@ async def main():
                         "role": "system",
                         "content": """
 You are a helpful assistant with access to the internet.
-
-Functions available to you:
-- For all page navigation, use the `go_to_url` tool.
                         """.strip(),
                     },
                     {"role": "user", "content": agent_task},
                 ]
                 for _ in range(MAX_N_AGENT_LOOPS):
+                    await asyncio.sleep(2)
                     llm_response = await llm_client.chat.completions.create(
                         model=os.environ["DEFAULT_MODEL"],
                         messages=messages_history,
@@ -83,13 +90,18 @@ Functions available to you:
                             for func in AGENT_TOOLS.values()
                         ],
                     )
+                    msg_role: str = llm_response.choices[0].message.role
+                    msg_content: str = llm_response.choices[0].message.content
                     messages_history.append(
                         {
-                            "role": llm_response.choices[0].message.role,
-                            "content": llm_response.choices[0].message.content,
+                            "role": msg_role,
+                            "content": msg_content,
                             "tool_calls": llm_response.choices[0].message.tool_calls,
                         },
                     )
+                    if msg_role == "assistant" and msg_content:
+                        print(msg_content)
+
                     tool_calls: list | None = llm_response.choices[0].message.tool_calls
                     if not tool_calls:
                         print("No tool calls - assumed finished.")

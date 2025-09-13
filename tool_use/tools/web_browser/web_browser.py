@@ -134,6 +134,12 @@ class CustomMarkdownConverter(MarkdownConverter):
         self.tag_counters = options["tag_counters"]
         self.tag_ids = options["tag_ids"]
 
+    def convert_input(self, el, text, parent_tags) -> str:
+        """Custom markdown rendering of <input> tags."""
+        new_tag_id: str = f'input_{next(self.tag_counters["input"])}'
+        self.tag_ids.append(new_tag_id)
+        return f"<input> [{text}] [id={new_tag_id}]"
+
     def convert_textarea(self, el, text, parent_tags) -> str:
         """Custom markdown rendering of <textarea> tags."""
         new_tag_id: str = f'textarea_{next(self.tag_counters["textarea"])}'
@@ -178,9 +184,6 @@ async def refresh_page_view(current_session: BrowserSessionState) -> None:
     current_session.text_paged = split_text_into_pages(
         current_session.text, n_lines_per_page=50
     )
-
-    print(current_session.tag_counters)
-    print(current_session.tag_ids)
 
 
 async def go_to_url(url: str) -> str:
@@ -296,10 +299,16 @@ Available tag_id values are:
 """
 
     tag_type, tag_num = tag_id.split("_")
+    tag_num = int(tag_num)
 
     try:
-        css_selector: str = f"{tag_type}:nth-of-type({tag_num})"
-        element = await current_session.browser_tab.query(css_selector)
+        # css_selector: str = f"{tag_type}:nth-of-type({tag_num})"
+        # element = await current_session.browser_tab.query(css_selector)
+        elements = await current_session.browser_tab.find(
+            tag_name=tag_type, find_all=True
+        )
+
+        element = elements[tag_num - 1]
         await element.wait_until(is_interactable=True, timeout=10)
         await element.insert_text(text_to_enter)
     except PydollException as pydoll_error:
@@ -329,10 +338,16 @@ Available tag_id values are:
 """
 
     tag_type, tag_num = tag_id.split("_")
+    tag_num = int(tag_num)
 
     try:
-        css_selector: str = f"{tag_type}:nth-of-type({tag_num})"
-        element = await current_session.browser_tab.query(css_selector)
+        # css_selector: str = f"{tag_type}:nth-of-type({tag_num})"
+        # element = await current_session.browser_tab.query(css_selector)
+        elements = await current_session.browser_tab.find(
+            tag_name=tag_type, find_all=True
+        )
+
+        element = elements[tag_num - 1]
         await element.wait_until(is_interactable=True, timeout=10)
         await element.press_keyboard_key(Key.ENTER)
     except PydollException as pydoll_error:
