@@ -128,6 +128,18 @@ class CustomMarkdownConverter(MarkdownConverter):
     I'm using it to highlight interactable elements (e.g. buttons, text inputs) each with a
     unique ID which the agent can use to interact with them.
     """
+    ATTRIBUTES_TO_INCLUDE = {
+    'a': ['title', 'target', 'rel', 'download'],
+    'button': ['name', 'value', 'type', 'disabled'],
+    'input': ['type', 'name', 'value', 'placeholder', 'checked', 'disabled', 'readonly', 'required'],
+    'textarea': ['name', 'placeholder', 'rows', 'cols', 'disabled', 'readonly', 'required'],
+    'select': ['name', 'multiple', 'disabled'],
+    'option': ['value', 'selected'],
+    'img': ['alt', 'src', 'title'],
+    'iframe': ['src', 'title'],
+    # Global attributes (can apply to many tags)
+    '*': ['id', 'title', 'role', 'aria-hidden', 'aria-label', 'aria-expanded', 'aria-current', 'aria-haspopup']
+    }
 
     def __init__(self, **options) -> None:
         super().__init__(**options)
@@ -156,7 +168,28 @@ class CustomMarkdownConverter(MarkdownConverter):
         """Custom markdown rendering of <button> tags."""
         new_tag_id: str = f'button_{next(self.tag_counters["button"])}'
         self.tag_ids.append(new_tag_id)
-        return f"<button> [{text}] [id={new_tag_id}]"
+
+        attributes_to_render = []
+        allowed_attributes = [
+            *self.ATTRIBUTES_TO_INCLUDE["button"],
+            *self.ATTRIBUTES_TO_INCLUDE["*"],
+        ]
+        for attr, value in el.attrs.items():
+            if attr in allowed_attributes:
+                if isinstance(value, list):
+                    value = " ".join(value)
+
+                if value:
+                    attributes_to_render.append(f'{attr}="{value}"')
+                else:
+                    attributes_to_render.append(attr)
+
+        cleaned_text = text.strip()
+        if cleaned_text:
+            attributes_to_render.append(f'text="{cleaned_text}"')
+
+        attributes_str = " ".join(attributes_to_render)
+        return f"<button> [{attributes_str}] [id={new_tag_id}]"
 
 
 def markdownify_custom(html: str, **options) -> str:
