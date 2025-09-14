@@ -13,9 +13,10 @@ import openai
 
 from tool_use.tools.web_browser import (
     BrowserManager,
+    click_button,
     enter_text_into_textbox,
     go_to_url,
-    press_enter_key,
+    # press_enter_key,
     text_search,
     WebBrowser,
 )
@@ -25,7 +26,6 @@ AGENT_TASKS: Final[list[str]] = [
     (
         "Please find me the company number of the company Stubben Edge UK. "
         "Answer this question using the web browsing tools provided to you. "
-        "Start at ask.com"
     ),
     # (
     #     "Go to https://en.wikipedia.org/wiki/List_of_serial_killers_by_number_of_victims, "
@@ -42,9 +42,10 @@ AGENT_TASKS: Final[list[str]] = [
     # "Go to companies house UK and find me contact phone numbers for EPSILON HEAT TRANSFER",
 ]
 AGENT_TOOLS: Final[dict[str, Callable]] = {
+    "click_button": click_button,
     "enter_text_into_textbox": enter_text_into_textbox,
     "go_to_url": go_to_url,
-    "press_enter_key": press_enter_key,
+    # "press_enter_key": press_enter_key,
     "text_search": text_search,
 }
 MAX_N_AGENT_LOOPS: Final[int] = 10
@@ -81,7 +82,7 @@ You are a helpful assistant with access to the internet.
                     {"role": "user", "content": agent_task},
                 ]
                 for _ in range(MAX_N_AGENT_LOOPS):
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(5)
                     llm_response = await llm_client.chat.completions.create(
                         model=os.environ["DEFAULT_MODEL"],
                         messages=messages_history,

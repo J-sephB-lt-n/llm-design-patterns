@@ -5,12 +5,13 @@ Tools which an AI agent can use to browse the web.
 import asyncio
 import contextlib
 import itertools
-import random
 import re
 from contextvars import ContextVar
 from dataclasses import dataclass
 from itertools import batched
+from typing import Literal
 
+import bs4
 import pydoll.browser.tab
 from markdownify import MarkdownConverter, markdownify
 from pydoll.browser.chromium import Chrome
@@ -129,7 +130,7 @@ class CustomMarkdownConverter(MarkdownConverter):
     unique ID which the agent can use to interact with them.
     """
 
-    ATTRIBUTES_TO_INCLUDE = {
+    ATTRIBUTES_TO_RENDER = {
         "a": ["title", "target", "rel", "download"],
         "button": ["name", "value", "type", "disabled"],
         "input": [
@@ -155,7 +156,7 @@ class CustomMarkdownConverter(MarkdownConverter):
         "option": ["value", "selected"],
         "img": ["alt", "src", "title"],
         "iframe": ["src", "title"],
-        # Global attributes (can apply to many tags)
+        # global attributes (always included)
         "*": [
             "id",
             "title",
@@ -174,7 +175,18 @@ class CustomMarkdownConverter(MarkdownConverter):
         self.tag_counters = options["tag_counters"]
         self.tag_ids = options["tag_ids"]
 
-    def convert_img(self, el, text, parent_tags) -> str:
+    def convert_button(self, el: bs4.Tag, text: str, parent_tags) -> str:
+        """Custom markdown rendering of <button> tags."""
+        new_tag_id: str = f'button_{next(self.tag_counters["button"])}'
+        self.tag_ids.append(new_tag_id)
+        attributes_str: str = self.generate_attributes_string(
+            tag_type="button", soup_obj=el
+        )
+
+        min_text: str = re.sub(r"\s+", " ", text.strip())
+        return f"<button id={new_tag_id} text='{min_text}' {attributes_str}>"
+
+    def convert_img(self, el: bs4.Tag, text, parent_tags) -> str:
         """Custom markdown rendering of <img> tags."""
         src = el.get("src", "")
         if src.startswith("data:image"):
@@ -182,34 +194,44 @@ class CustomMarkdownConverter(MarkdownConverter):
 
         return super().convert_img(el, text, parent_tags)
 
-    def convert_input(self, el, text, parent_tags) -> str:
+    def convert_input(self, el: bs4.Tag, text, parent_tags) -> str:
         """Custom markdown rendering of <input> tags."""
         new_tag_id: str = f'input_{next(self.tag_counters["input"])}'
         self.tag_ids.append(new_tag_id)
-        return f"<input> [{text}] [id={new_tag_id}]"
+        attributes_str: str = self.generate_attributes_string(
+            tag_type="input", soup_obj=el
+        )
 
-    def convert_textarea(self, el, text, parent_tags) -> str:
+        min_text: str = re.sub(r"\s+", " ", text.strip())
+        return f"<input id={new_tag_id} text='{min_text}' {attributes_str}>"
+
+    def convert_textarea(self, el: bs4.Tag, text, parent_tags) -> str:
         """Custom markdown rendering of <textarea> tags."""
         new_tag_id: str = f'textarea_{next(self.tag_counters["textarea"])}'
         self.tag_ids.append(new_tag_id)
-        return f"""
-<textarea> [id={new_tag_id}]
-```
-{ text }
-```
-        """.strip()
+        attributes_str: str = self.generate_attributes_string(
+            tag_type="input", soup_obj=el
+        )
 
-    def convert_button(self, el, text, parent_tags) -> str:
-        """Custom markdown rendering of <button> tags."""
-        new_tag_id: str = f'button_{next(self.tag_counters["button"])}'
-        self.tag_ids.append(new_tag_id)
+        min_text: str = re.sub(r"\s+", " ", text.strip())
+        return f"<textarea id={new_tag_id} text='{min_text}' {attributes_str}>"
 
+    def generate_attributes_string(
+        self,
+        tag_type: Literal["button", "img", "input", "textarea"],
+        soup_obj: bs4.Tag,
+    ) -> str:
+        """
+        Generate a string containing the attributes of object `soup_obj`.
+        (This string is intended to be included in markdownified HTML).
+        Only the attributes specified in `self.ATTRIBUTES_TO_RENDER` are included.
+        """
         attributes_to_render = []
         allowed_attributes = [
-            *self.ATTRIBUTES_TO_INCLUDE["button"],
-            *self.ATTRIBUTES_TO_INCLUDE["*"],
+            *self.ATTRIBUTES_TO_RENDER[tag_type],
+            *self.ATTRIBUTES_TO_RENDER["*"],
         ]
-        for attr, value in el.attrs.items():
+        for attr, value in soup_obj.attrs.items():
             if attr in allowed_attributes:
                 if isinstance(value, list):
                     value = " ".join(value)
@@ -219,12 +241,8 @@ class CustomMarkdownConverter(MarkdownConverter):
                 else:
                     attributes_to_render.append(attr)
 
-        cleaned_text = text.strip()
-        if cleaned_text:
-            attributes_to_render.append(f'text="{cleaned_text}"')
-
         attributes_str = " ".join(attributes_to_render)
-        return f"<button id={new_tag_id} {attributes_str}>"
+        return attributes_str
 
 
 def markdownify_custom(html: str, **options) -> str:
