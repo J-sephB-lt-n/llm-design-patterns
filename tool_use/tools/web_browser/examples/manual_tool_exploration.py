@@ -15,7 +15,7 @@ from tool_use.tools.web_browser import (
     click_button,
     enter_text_into_textbox,
     go_to_url,
-    press_enter_key,
+    # press_enter_key,
     text_search,
     view_section,
     WebBrowser,
@@ -25,7 +25,7 @@ AGENT_TOOLS: Final[dict[str, Callable]] = {
     "click_button": click_button,
     "enter_text_into_textbox": enter_text_into_textbox,
     "go_to_url": go_to_url,
-    "press_enter_key": press_enter_key,
+    # "press_enter_key": press_enter_key,
     "text_search": text_search,
     "view_section": view_section,
 }

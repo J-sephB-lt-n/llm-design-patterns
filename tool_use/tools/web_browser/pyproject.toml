@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "markdownify>=1.2.0",
+    "pydantic-ai-slim[cli,logfire,openai]>=1.0.6",
     "pydoll-python>=2.8.0",
     "questionary>=2.1.1",
 ]
