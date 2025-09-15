@@ -13,10 +13,9 @@ from typing import Literal
 
 import bs4
 import pydoll.browser.tab
-from markdownify import MarkdownConverter, markdownify
+from markdownify import MarkdownConverter
 from pydoll.browser.chromium import Chrome
 from pydoll.browser.options import ChromiumOptions
-from pydoll.constants import Key
 from pydoll.exceptions import PydollException
 
 
@@ -184,7 +183,7 @@ class CustomMarkdownConverter(MarkdownConverter):
         )
 
         min_text: str = re.sub(r"\s+", " ", text.strip())
-        return f"<button id={new_tag_id} text='{min_text}' {attributes_str}>"
+        return f"<button tag_id={new_tag_id} text='{min_text}' {attributes_str}>"
 
     def convert_img(self, el: bs4.Tag, text, parent_tags) -> str:
         """Custom markdown rendering of <img> tags."""
@@ -203,7 +202,7 @@ class CustomMarkdownConverter(MarkdownConverter):
         )
 
         min_text: str = re.sub(r"\s+", " ", text.strip())
-        return f"<input id={new_tag_id} text='{min_text}' {attributes_str}>"
+        return f"<input tag_id={new_tag_id} text='{min_text}' {attributes_str}>"
 
     def convert_textarea(self, el: bs4.Tag, text, parent_tags) -> str:
         """Custom markdown rendering of <textarea> tags."""
@@ -214,7 +213,7 @@ class CustomMarkdownConverter(MarkdownConverter):
         )
 
         min_text: str = re.sub(r"\s+", " ", text.strip())
-        return f"<textarea id={new_tag_id} text='{min_text}' {attributes_str}>"
+        return f"<textarea tag_id={new_tag_id} text='{min_text}' {attributes_str}>"
 
     def generate_attributes_string(
         self,
@@ -294,6 +293,7 @@ async def go_to_url(url: str) -> str:
 
     await current_session.browser_tab.go_to(url)
     body = await current_session.browser_tab.find(tag_name="body", timeout=30)
+    await asyncio.sleep(3)  # to cater for redirects
     await body.wait_until(is_visible=True)
 
     await refresh_page_view(current_session)
@@ -351,17 +351,19 @@ async def text_search(regex_pattern: str, ignore_case: bool = True) -> str:
         regex_pattern (str): The regex pattern to search for.
         ignore_case (bool): Whether to perform a case-insensitive search.
     """
-    match_sections: list[int] = []
     current_session = current_browser_session.get()
     if not current_session:
         raise RuntimeError("No active browser session.")
     if current_session.url is None:
         return "Please navigate to a URL first."
 
+    await refresh_page_view(current_session)
+
     flags = re.DOTALL
     if ignore_case:
         flags |= re.IGNORECASE
 
+    match_sections: list[int] = []
     for section_num, section_text in enumerate(current_session.text_paged, start=1):
         if re.search(regex_pattern, section_text, flags):
             match_sections.append(section_num)
@@ -411,6 +413,7 @@ Failed to enter text into `{tag_id}`. Error was:
 ```
         """
     else:
+        await refresh_page_view(current_session)
         return f"Successfully entered text '{text_to_enter}' into {tag_type} text input with ID '{tag_id}'"
 
 
@@ -448,62 +451,93 @@ Failed to click button with ID `{tag_id}`. Error was:
 ```
         """
     else:
-        return f"Successfully clicked button with ID '{tag_id}'"
+        # wait for new stuff to load if there was a page navigation #
+        body = await current_session.browser_tab.find(tag_name="body", timeout=30)
+        await asyncio.sleep(3)  # to cater for redirects
+        await body.wait_until(is_visible=True)
 
-
-async def press_enter_key(tag_id: str) -> str:
-    """Press the enter key while focused on element with ID `tag_id`."""
-    current_session = current_browser_session.get()
-    if not current_session:
-        raise RuntimeError("No active browser session.")
-    if current_session.url is None:
-        return "Please navigate to a URL first."
-
-    if tag_id not in current_session.tag_ids:
-        return f"""
-Invalid tag_id '{ tag_id }'
-Available tag_id values are:
-{"\n".join("    - " + x for x in current_session.tag_ids)}
-"""
-
-    tag_type, tag_num = tag_id.split("_")
-    tag_num = int(tag_num)
-
-    try:
-        elements = await current_session.browser_tab.find(
-            tag_name=tag_type, find_all=True
-        )
-
-        element = elements[tag_num - 1]
-        await element.wait_until(is_interactable=True, timeout=10)
-        await element.press_keyboard_key(Key.ENTER, interval=0.1)
-    except PydollException as pydoll_error:
-        return f"""
-Failed to enter text into `{tag_id}`. Error was:
-```
-{pydoll_error}
-```
-        """
-    else:
-        current_url: str = await current_session.browser_tab.current_url
-        if current_url != current_session.url:
-            await refresh_page_view(current_session)
-            return f"""
-Successfully pressed enter key on element with ID '{tag_id}'.
-This resulted in a page redirection, and the current URL is now {current_session.url}.
-
-For size reasons, the web page text has been split into multiple sections.
-Here is the text content of section 1 of {len(current_session.text_paged)}:
-```
-{current_session.text_paged[0]}
-```
-""".strip()
-        else:
+        message: str = f"Successfully clicked button with ID '{tag_id}'."
+        new_html: str = await current_session.browser_tab.page_source
+        if new_html == current_session.html:
             return (
-                f"Successfully pressed enter key on element with ID '{tag_id}'. "
-                "If you expected this to result in a page content update, then see the latest state of "
-                "the page using the view_section() tool."
+                message
+                + " Warning: this action did not result in any change in the page HTML."
             )
+        else:
+            await refresh_page_view(current_session)
+            return message + (
+                " This action resulted in a change in the page HTML. "
+                "Use the view_section() tool to view the new page."
+            )
+
+
+# async def press_enter_key(tag_id: str) -> str:
+#     """Press the enter key while focused on element with ID `tag_id`."""
+#     current_session = current_browser_session.get()
+#     if not current_session:
+#         raise RuntimeError("No active browser session.")
+#     if current_session.url is None:
+#         return "Please navigate to a URL first."
+#
+#     if tag_id not in current_session.tag_ids:
+#         return f"""
+# Invalid tag_id '{ tag_id }'
+# Available tag_id values are:
+# {"\n".join("    - " + x for x in current_session.tag_ids)}
+# """
+#
+#     tag_type, tag_num = tag_id.split("_")
+#     tag_num = int(tag_num)
+#
+#     try:
+#         elements = await current_session.browser_tab.find(
+#             tag_name=tag_type, find_all=True
+#         )
+#
+#         element = elements[tag_num - 1]
+#         await element.wait_until(is_interactable=True, timeout=10)
+#         await element.press_keyboard_key(Key.ENTER, interval=0.1)
+#     except PydollException as pydoll_error:
+#         return f"""
+# Failed to enter text into `{tag_id}`. Error was:
+# ```
+# {pydoll_error}
+# ```
+#         """
+#     else:
+#         # wait for new stuff to load if there was a page navigation #
+#         body = await current_session.browser_tab.find(tag_name="body", timeout=30)
+#         await asyncio.sleep(3)  # to cater for redirects
+#         await body.wait_until(is_visible=True)
+#
+#         message: str = f"Successfully pressed enter on element with tag_id='{tag_id}'."
+#         new_html: str = await current_session.browser_tab.page_source
+#         if new_html == current_session.html:
+#             return (
+#                 message
+#                 + " Warning: this action did not result in any change in the page HTML."
+#             )
+#         current_url: str = await current_session.browser_tab.current_url
+#         if current_url != current_session.url:
+#             await refresh_page_view(current_session)
+#             return (
+#                 message
+#                 + f"""
+# This resulted in a page redirection, and the current URL is now {current_session.url}.
+#
+# For size reasons, the web page text has been split into multiple sections.
+# Here is the text content of section 1 of {len(current_session.text_paged)}:
+# ```
+# {current_session.text_paged[0]}
+# ```
+# """.strip()
+#             )
+#         else:
+#             await refresh_page_view(current_session)
+#             return (
+#                 message
+#                 + "See the latest state of the page using the view_section() tool."
+#             )
 
 
 async def search_current_page_hyperlinks(link_text_contains: str) -> list[str]:

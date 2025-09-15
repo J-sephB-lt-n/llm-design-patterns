@@ -25,7 +25,8 @@ from utils import func_defn_as_json_schema
 AGENT_TASKS: Final[list[str]] = [
     (
         "Please find me the company number of the company Stubben Edge UK. "
-        "Answer this question using the web browsing tools provided to you. "
+        "Navigate to a useful page using the web browsing tools provided to you, then find "
+        "the answer by extensively exploring the page."
     ),
     # (
     #     "Go to https://en.wikipedia.org/wiki/List_of_serial_killers_by_number_of_victims, "
