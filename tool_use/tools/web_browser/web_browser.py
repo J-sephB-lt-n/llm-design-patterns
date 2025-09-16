@@ -471,6 +471,21 @@ Failed to click button with ID `{tag_id}`. Error was:
             )
 
 
+async def view_page_screenshot() -> str:
+    """See the current web page as an image."""
+    current_session = current_browser_session.get()
+    if not current_session:
+        raise RuntimeError("No active browser session.")
+    if current_session.url is None:
+        return "Please navigate to a URL first."
+
+    page_image_b64: str = await current_session.browser_tab.take_screenshot(
+        as_base64=True,
+    )
+
+    return page_image_b64
+
+
 # async def press_enter_key(tag_id: str) -> str:
 #     """Press the enter key while focused on element with ID `tag_id`."""
 #     current_session = current_browser_session.get()

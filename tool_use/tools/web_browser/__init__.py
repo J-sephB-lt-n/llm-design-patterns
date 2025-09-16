@@ -5,6 +5,7 @@ from .web_browser import (
     go_to_url,
     # press_enter_key,
     text_search,
+    view_page_screenshot,
     view_section,
     WebBrowser,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "go_to_url",
     # "press_enter_key",
     "text_search",
+    "view_page_screenshot",
     "view_section",
     "WebBrowser",
 ]
