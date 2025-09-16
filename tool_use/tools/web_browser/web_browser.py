@@ -472,7 +472,7 @@ Failed to click button with ID `{tag_id}`. Error was:
 
 
 async def view_page_screenshot() -> str:
-    """See the current web page as an image."""
+    """Take a screenshot of the current web page (i.e. see the page as an image)."""
     current_session = current_browser_session.get()
     if not current_session:
         raise RuntimeError("No active browser session.")
