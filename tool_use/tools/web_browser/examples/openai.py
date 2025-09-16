@@ -7,6 +7,7 @@ import json
 import os
 from collections.abc import Callable
 from typing import Final
+from typing_extensions import override
 
 import dotenv
 import openai
@@ -17,6 +18,8 @@ from tool_use.tools.web_browser import (
     enter_text_into_textbox,
     go_to_url,
     # press_enter_key,
+    view_page_screenshot,
+    view_section,
     text_search,
     WebBrowser,
 )
@@ -48,11 +51,13 @@ AGENT_TOOLS: Final[dict[str, Callable]] = {
     "go_to_url": go_to_url,
     # "press_enter_key": press_enter_key,
     "text_search": text_search,
+    "view_page_screenshot": view_page_screenshot,
+    "view_section": view_section,
 }
 MAX_N_AGENT_LOOPS: Final[int] = 10
 
 print(
-    f'Attempting to load credentials from .env file. success={dotenv.load_dotenv(".env")}'
+    f'Attempting to load credentials from .env file. success={dotenv.load_dotenv(".env", override=True)}'
 )
 
 llm_client = openai.AsyncOpenAI(
@@ -78,6 +83,8 @@ async def main():
                         "role": "system",
                         "content": """
 You are a helpful assistant with access to the internet.
+When landing on a new web page, use the text tools (view_section, text_search) first, and \
+then use view_page_screenshot() after if you are stuck (before giving up).
                         """.strip(),
                     },
                     {"role": "user", "content": agent_task},
@@ -117,13 +124,29 @@ You are a helpful assistant with access to the internet.
                             )
                             func_result = await AGENT_TOOLS[func_name](**func_kwargs)
                             print("Tool used successfully")
-                            messages_history.append(
-                                {
-                                    "role": "tool",
-                                    "tool_call_id": tool_call.id,
-                                    "content": str(func_result),
-                                }
-                            )
+                            if func_name == "view_page_screenshot":
+                                messages_history.append(
+                                    {
+                                        "role": "tool",
+                                        "tool_call_id": tool_call.id,
+                                        "content": [
+                                            {
+                                                "type": "image_url",
+                                                "image_url": {
+                                                    "url": f"data:image/png:base64,{func_result}"
+                                                },
+                                            }
+                                        ],
+                                    }
+                                )
+                            else:
+                                messages_history.append(
+                                    {
+                                        "role": "tool",
+                                        "tool_call_id": tool_call.id,
+                                        "content": str(func_result),
+                                    }
+                                )
                         except Exception as err:
                             error_type: str = type(err).__name__
                             error_message: str = str(err)
