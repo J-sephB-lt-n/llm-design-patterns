@@ -5,7 +5,7 @@ Example usage:
 $ uv run python -m tool_use.tools.web_browser.examples.run_agent_task_cli
 """
 
-import argparse
+import asyncio
 from collections.abc import Callable
 
 import questionary
@@ -18,15 +18,15 @@ AVAILABLE_AGENTS: dict[str, Callable] = {
 }
 
 
-def main(agent: str, task: str) -> None:
-    pass
-
-
 if __name__ == "__main__":
-    agent: str = questionary.select(
+    agent_name: str = questionary.select(
         "Please select an agent: ",
         choices=AVAILABLE_AGENTS.keys(),
     ).ask()
+    agent = AVAILABLE_AGENTS[agent_name]
     task: str = input("Please describe your task: ")
 
     print(f"agent is '{agent}'. Task is '{task}'.")
+    asyncio.run(
+        agent(task),
+    )
