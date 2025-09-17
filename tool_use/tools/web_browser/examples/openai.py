@@ -7,7 +7,6 @@ import json
 import os
 from collections.abc import Callable
 from typing import Final
-from typing_extensions import override
 
 import dotenv
 import openai
@@ -23,14 +22,16 @@ from tool_use.tools.web_browser import (
     text_search,
     WebBrowser,
 )
+from tool_use.tools.web_browser.examples.web_agents import SYSTEM_PROMPT
 from utils import func_defn_as_json_schema
 
 AGENT_TASKS: Final[list[str]] = [
-    (
-        "Please find me the company number of the company Stubben Edge UK. "
-        "Navigate to a useful page using the web browsing tools provided to you, then find "
-        "the answer by extensively exploring the page."
-    ),
+    "Find me the names of the team members of stubben edge labs UK using duckduckgo",
+    # (
+    #     "Please find me the company number of the company Stubben Edge UK. "
+    #     "Navigate to a useful page using the web browsing tools provided to you, then find "
+    #     "the answer by extensively exploring the page."
+    # ),
     # (
     #     "Go to https://en.wikipedia.org/wiki/List_of_serial_killers_by_number_of_victims, "
     #     "navigate to one of the URLs you see on that page and succinctly summarise the content "
@@ -79,14 +80,7 @@ async def main():
             print(f"Started task '{agent_task}'")
             async with browser.isolated_browser_session():
                 messages_history: list[dict] = [
-                    {
-                        "role": "system",
-                        "content": """
-You are a helpful assistant with access to the internet.
-When landing on a new web page, use the text tools (view_section, text_search) first, and \
-then use view_page_screenshot() after if you are stuck (before giving up).
-                        """.strip(),
-                    },
+                    {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": agent_task},
                 ]
                 for _ in range(MAX_N_AGENT_LOOPS):
