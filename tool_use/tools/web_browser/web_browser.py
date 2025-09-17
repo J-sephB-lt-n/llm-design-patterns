@@ -183,7 +183,7 @@ class CustomMarkdownConverter(MarkdownConverter):
         )
 
         min_text: str = re.sub(r"\s+", " ", text.strip())
-        return f"<button tag_id={new_tag_id} text='{min_text}' {attributes_str}>"
+        return f"<button tag_id={new_tag_id} text='{min_text}' {attributes_str}>\n"
 
     def convert_img(self, el: bs4.Tag, text, parent_tags) -> str:
         """Custom markdown rendering of <img> tags."""
@@ -202,7 +202,7 @@ class CustomMarkdownConverter(MarkdownConverter):
         )
 
         min_text: str = re.sub(r"\s+", " ", text.strip())
-        return f"<input tag_id={new_tag_id} text='{min_text}' {attributes_str}>"
+        return f"<input tag_id={new_tag_id} text='{min_text}' {attributes_str}>\n"
 
     def convert_textarea(self, el: bs4.Tag, text, parent_tags) -> str:
         """Custom markdown rendering of <textarea> tags."""
@@ -213,7 +213,7 @@ class CustomMarkdownConverter(MarkdownConverter):
         )
 
         min_text: str = re.sub(r"\s+", " ", text.strip())
-        return f"<textarea tag_id={new_tag_id} text='{min_text}' {attributes_str}>"
+        return f"<textarea tag_id={new_tag_id} text='{min_text}' {attributes_str}>\n"
 
     def generate_attributes_string(
         self,
