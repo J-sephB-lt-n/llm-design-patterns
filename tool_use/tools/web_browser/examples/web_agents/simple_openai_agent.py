@@ -37,7 +37,7 @@ AGENT_TOOLS: Final[dict[str, Callable]] = {
 
 async def simple_openai_agent(
     task: str,
-    max_n_agent_loops: int = 10,
+    max_n_agent_loops: int = 20,
 ) -> None:
     """A for loop with tools that includes the full chat history in every chat completion."""
     llm = openai.AsyncOpenAI(
@@ -55,7 +55,7 @@ async def simple_openai_agent(
     try:
         browser = WebBrowser(browser_manager)
         async with browser.isolated_browser_session():
-            for _ in range(max_n_agent_loops):
+            for loop_idx in range(max_n_agent_loops):
                 is_finished: bool = await run_agent_loop(
                     llm=llm, messages_history=messages_history
                 )
@@ -65,9 +65,7 @@ async def simple_openai_agent(
                 print(
                     f"FAILURE: Agent did not reach a solution after {max_n_agent_loops} iterations."
                 )
-            print(
-                f"SUCCESS: Agent completed task after {max_n_agent_loops} iterations."
-            )
+            print(f"SUCCESS: Agent completed task after {loop_idx} iterations.")
     finally:
         await browser_manager.shutdown_browser()
 
