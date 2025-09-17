@@ -8,9 +8,11 @@ $ uv run python -m tool_use.tools.web_browser.examples.run_agent_task_cli
 import asyncio
 from collections.abc import Callable
 
+import dotenv
 import questionary
 
 from tool_use.tools.web_browser.examples import web_agents
+
 
 AVAILABLE_AGENTS: dict[str, Callable] = {
     "Simple OpenAI for loop": web_agents.simple_openai_agent,
@@ -27,6 +29,9 @@ if __name__ == "__main__":
     task: str = input("Please describe your task: ")
 
     print(f"agent is '{agent}'. Task is '{task}'.")
+    print(
+        f'Attempting to load credentials from .env file. success={dotenv.load_dotenv(".env", override=True)}'
+    )
     asyncio.run(
         agent(task),
     )

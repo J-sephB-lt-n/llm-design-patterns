@@ -12,7 +12,6 @@ import json
 import os
 import time
 
-import dotenv
 from pydantic_ai import Agent
 from pydantic_ai.messages import BinaryContent, ToolReturn
 from pydantic_ai.models.openai import OpenAIChatModel
@@ -30,8 +29,6 @@ from tool_use.tools.web_browser import (
     WebBrowser,
 )
 from tool_use.tools.web_browser.examples.web_agents import SYSTEM_PROMPT
-
-dotenv.load_dotenv(".env", override=True)
 
 
 async def pydantic_ai_agent(
