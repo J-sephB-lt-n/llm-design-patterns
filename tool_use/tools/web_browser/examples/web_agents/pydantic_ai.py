@@ -35,6 +35,8 @@ async def pydantic_ai_agent(
     task: str,
 ) -> None:
     """Perform `task` using a pydanticAI agent with access to web browser tools."""
+    print(f"SYSTEM PROMPT: \n{SYSTEM_PROMPT}")
+
     llm = OpenAIChatModel(
         os.environ["DEFAULT_MODEL"],
         provider=OpenAIProvider(

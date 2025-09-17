@@ -40,6 +40,8 @@ async def simple_openai_agent(
     max_n_agent_loops: int = 20,
 ) -> None:
     """A for loop with tools that includes the full chat history in every chat completion."""
+    print(f"SYSTEM PROMPT: \n{SYSTEM_PROMPT}")
+
     llm = openai.AsyncOpenAI(
         base_url=os.environ["OPENAI_BASE_URL"],
         api_key=os.environ["OPENAI_API_KEY"],
@@ -60,12 +62,15 @@ async def simple_openai_agent(
                     llm=llm, messages_history=messages_history
                 )
                 if is_finished:
+                    print(
+                        f"SUCCESS: Agent completed task after {loop_idx + 1} iterations."
+                    )
                     break
             else:
                 print(
                     f"FAILURE: Agent did not reach a solution after {max_n_agent_loops} iterations."
                 )
-            print(f"SUCCESS: Agent completed task after {loop_idx} iterations.")
+
     finally:
         await browser_manager.shutdown_browser()
 
