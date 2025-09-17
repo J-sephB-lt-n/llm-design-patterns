@@ -413,8 +413,15 @@ Failed to enter text into `{tag_id}`. Error was:
 ```
         """
     else:
+        html_has_changed_message: str = ""
+        new_html: str = await current_session.browser_tab.page_source
+        if new_html != current_session.html:
+            html_has_changed_message = "\nWARNING: the page HTML has changed. View the updated page content before taking further actions."
         await refresh_page_view(current_session)
-        return f"Successfully entered text '{text_to_enter}' into {tag_type} text input with ID '{tag_id}'"
+        return (
+            f"Successfully entered text '{text_to_enter}' into {tag_type} text input with ID '{tag_id}'"
+            + html_has_changed_message
+        )
 
 
 async def click_button(tag_id: str) -> str:
