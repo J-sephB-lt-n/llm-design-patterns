@@ -37,7 +37,7 @@ AGENT_TOOLS: Final[dict[str, Callable]] = {
 
 async def simple_openai_agent(
     task: str,
-    max_n_agent_loops: int,
+    max_n_agent_loops: int = 10,
 ) -> None:
     """A for loop with tools that includes the full chat history in every chat completion."""
     llm = openai.AsyncOpenAI(
@@ -115,13 +115,23 @@ async def run_agent_loop(llm: openai.AsyncOpenAI, messages_history: list[dict]) 
                     {
                         "role": "tool",
                         "tool_call_id": tool_call.id,
+                        "content": "Successfully captured page screenshot",
+                    }
+                )
+                messages_history.append(
+                    {
+                        "role": "user",
                         "content": [
+                            {
+                                "type": "text",
+                                "text": "Here is the page screenshot.",
+                            },
                             {
                                 "type": "image_url",
                                 "image_url": {
                                     "url": f"data:image/png;base64,{func_result}"
                                 },
-                            }
+                            },
                         ],
                     }
                 )
